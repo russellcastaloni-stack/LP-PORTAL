@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Launchpad Portal – Sign In</title>
+    <link rel="icon" type="image/png" href="ICONS/LPwhite.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* ── Design tokens — Material Design (MUI) palette ── */
+        :root {
+            --blue:       #1976d2;   /* MUI primary.main */
+            --blue-dark:  #1565c0;   /* MUI primary.dark */
+            --navy:       #1A2B45;
+            --slate:      rgba(0,0,0,0.87);  /* MUI text.primary */
+            --red:        #d32f2f;   /* MUI error.main */
+            --green:      #2e7d32;   /* MUI success.main */
+            --radius-card: 4px;
+            --radius-btn:  4px;
+            --shadow-card: 0px 11px 15px -7px rgba(0,0,0,0.2),0px 24px 38px 3px rgba(0,0,0,0.14),0px 9px 46px 8px rgba(0,0,0,0.12); /* MUI elevation 24 */
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body { height: 100%; }
+        body {
+            font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: radial-gradient(ellipse at 50% -10%, #16223a 0%, #0a1120 55%, #060a14 100%);
+            min-height: 100vh;
+            min-height: 100dvh;
+            overflow: hidden;
+        }
+
+        #starfield {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── Split-screen shell: illustration left, form right — full screen ── */
+        .split-shell {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            width: 100%;
+            height: 100vh;
+            height: 100dvh;
+            overflow: visible;
+        }
+        .split-illustration {
+            flex: 1 1 50%;
+            min-width: 0;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+        }
+        .blackhole-stage {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        .bh-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .bh-canvas.bh-fg {
+            pointer-events: none;
+            z-index: 2;
+        }
+        .bh-center-logo {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: clamp(90px, 14vw, 160px);
+            height: auto;
+            z-index: 1;
+            pointer-events: none;
+            filter: drop-shadow(0 0 26px rgba(140, 185, 255, 0.55)) drop-shadow(0 0 60px rgba(60, 110, 220, 0.35));
+        }
+        @media (max-width: 760px) {
+            .split-illustration { display: none; }
+        }
+
+        .form-side {
+            flex: 1 1 50%;
+            min-width: 0;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .card {
+            width: 90%;
+            height: 90%;
+            max-width: 520px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #1a2740;
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 32px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+            padding: 32px 36px;
+            text-align: center;
+            overflow-y: auto;
+            scrollbar-width: none;
+        }
+        .card::-webkit-scrollbar { display: none; }
+        @media (max-width: 760px) {
+            .card { width: 94%; height: 92%; }
+        }
+
+        .card-inner { width: 100%; max-width: 380px; margin: 0 auto; }
+
+        .logo { max-width: 190px; height: auto; margin-bottom: 14px; filter: drop-shadow(0 0 18px rgba(120,170,255,0.4)); }
+
+        .footer-address {
+            font-size: 10px;
+            color: rgba(255,255,255,0.4);
+            line-height: 1.6;
+            margin-top: 6px;
+        }
+
+        hr.divider {
+            border: none;
+            border-top: 1px solid rgba(255,255,255,0.14);
+            margin: 0 0 20px;
+        }
+
+        h2 { font-size: 17px; color: #fff; margin-bottom: 4px; letter-spacing: 0.5px; }
+        .subtitle { font-size: 13px; color: rgba(255,255,255,0.55); margin-bottom: 22px; font-weight: 500; }
+
+        /* ── Name input — floating label / notched outline ── */
+        .input-field {
+            position: relative;
+            margin-bottom: 22px;
+        }
+
+        #nameInput {
+            width: 100%;
+            padding: 13px 14px;
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 4px;
+            font-size: 16px;
+            background: rgba(255,255,255,0.06);
+            color: #fff;
+            min-height: 48px;
+            transition: border-color 0.15s, border-width 0.15s;
+        }
+        #nameInput:focus { outline: none; border-color: var(--blue); border-width: 2px; box-shadow: none; }
+        #nameInput::placeholder { color: rgba(255,255,255,0.4); opacity: 0; transition: opacity 0.15s ease; }
+        #nameInput:focus::placeholder { opacity: 1; }
+
+        .input-field label {
+            position: absolute;
+            left: 13px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 16px;
+            color: rgba(255,255,255,0.55);
+            background: transparent;
+            padding: 0 5px;
+            border-radius: 3px;
+            pointer-events: none;
+            transition: top 0.15s ease, font-size 0.15s ease, color 0.15s ease, background 0.15s ease;
+        }
+        /* Floats up + "notches" the border when focused or filled — the
+           background here must match .card's actual color (#1a2740) so it
+           masks the border line underneath; it was previously hardcoded to
+           the old space-bg navy (rgba(10,17,32,.85)) which no longer matches
+           the card and showed up as a mismatched dark bar. */
+        #nameInput:focus + label,
+        #nameInput:not(:placeholder-shown) + label {
+            top: 0;
+            font-size: 12px;
+            font-weight: bold;
+            background: #1a2740;
+        }
+        #nameInput:focus + label { color: var(--blue); }
+        #nameInput:not(:focus):not(:placeholder-shown) + label { color: rgba(255,255,255,0.75); }
+
+        /* ── PIN dots ── */
+        .pin-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .pin-header span { font-size: 12px; font-weight: bold; color: rgba(255,255,255,0.75); }
+
+        .pin-row {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+
+        .pin-digit {
+            width: 60px;
+            height: 64px;
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 4px;
+            font-size: 22px;
+            text-align: center;
+            font-weight: 500;
+            color: #fff;
+            background: rgba(255,255,255,0.06);
+            transition: border-color 0.15s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        @media (max-width: 360px) {
+            .pin-digit { width: 52px; height: 58px; }
+            .pin-row   { gap: 8px; }
+        }
+        .pin-digit:focus { outline: none; border-color: var(--blue); border-width: 2px; }
+        .pin-digit.filled { border-color: var(--blue); background: rgba(25,118,210,0.25); }
+        .pin-digit.filled:focus { border-width: 2px; }
+        .pin-digit.error  { border-color: var(--red);  background: rgba(211,47,47,0.25); animation: shake 0.3s; }
+
+        @keyframes shake {
+            0%,100% { transform: translateX(0); }
+            25%      { transform: translateX(-5px); }
+            75%      { transform: translateX( 5px); }
+        }
+
+        .pin-hint { font-size: 12px; color: #ff6b6b; margin-bottom: 24px; min-height: 18px; }
+        .pin-hint.err { color: #ff6b6b; font-weight: bold; }
+
+        .forgot-pin { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: -16px; margin-bottom: 24px; }
+
+        /* ── Sign In button (MUI contained button) ── */
+        .btn-signin {
+            width: 100%;
+            padding: 15px;
+            background: var(--navy);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius-btn);
+            font-size: 15px;
+            font-weight: 500;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s;
+            letter-spacing: 0.8px;
+            min-height: 52px;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+            box-shadow: 0px 3px 1px -2px rgba(0,0,0,0.2),0px 2px 2px 0px rgba(0,0,0,0.14),0px 1px 5px 0px rgba(0,0,0,0.12);
+        }
+        .btn-signin:disabled { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.35); cursor: not-allowed; box-shadow: none; }
+        .btn-signin:not(:disabled):hover,
+        .btn-signin:not(:disabled):active {
+            background: #102036;
+            box-shadow: 0px 2px 4px -1px rgba(0,0,0,0.2),0px 4px 5px 0px rgba(0,0,0,0.14),0px 1px 10px 0px rgba(0,0,0,0.12);
+        }
+
+        /* ── Spinner ── */
+        .spinner {
+            display: none;
+            width: 20px; height: 20px;
+            border: 2px solid rgba(255,255,255,0.4);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .btn-signin.loading .spinner  { display: inline-block; }
+        .btn-signin.loading .btn-text { display: none; }
+
+        /* ── Splash Screen ── */
+        #splash {
+            position: fixed;
+            inset: 0;
+            background: #1A2B45;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+        #splashVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #splashCircle {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10000;
+            pointer-events: none;
+            transition: none;
+        }
+        #splashCircle.grow {
+            width: 300vmax;
+            height: 300vmax;
+            transition: width 0.55s cubic-bezier(.4,0,.2,1), height 0.55s cubic-bezier(.4,0,.2,1);
+        }
+        #splash.done { display: none; }
+        .no-reps-notice {
+            background: rgba(255,193,7,0.15);
+            border: 1px solid rgba(255,193,7,0.4);
+            border-radius: 8px;
+            padding: 12px 14px;
+            font-size: 13px;
+            color: #ffd54f;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        /* ── Footer ── */
+        footer {
+            width: 100%;
+            margin-top: 24px;
+            padding: 14px 0 0;
+            text-align: center;
+            border-top: 1px solid rgba(255,255,255,0.15);
+        }
+        .footer-admin { margin-bottom: 6px; }
+        .footer-admin a {
+            color: rgba(255,255,255,0.85);
+            font-size: 13px;
+            text-decoration: none;
+            font-weight: bold;
+            letter-spacing: 0.4px;
+            padding: 8px 12px;
+            display: inline-block;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .footer-copyright { color: rgba(255,255,255,0.6); font-size: 11px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <!-- ── Splash Screen ── -->
+    <div id="splash">
+        <video id="splashVideo" src="ICONS/splash.mp4" autoplay muted playsinline></video>
+    </div>
+    <div id="splashCircle"></div>
+
+    <div id="starfield" aria-hidden="true"></div>
+
+    <div class="split-shell">
+        <div class="split-illustration">
+            <div class="blackhole-stage" id="blackholeStage">
+                <canvas class="bh-canvas bh-bg" id="bhCanvasBg"></canvas>
+                <img src="ICONS/MASCRID.png" alt="Launchpad" class="bh-center-logo" id="bhCenterLogo">
+                <canvas class="bh-canvas bh-fg" id="bhCanvasFg"></canvas>
+            </div>
+        </div>
+
+        <div class="form-side">
+        <div class="card">
+            <div class="card-inner">
+                <a href="https://launchpadph.com/" target="_blank" rel="noopener">
+                    <img src="ICONS/LPplain.png" alt="Launchpad Logo" class="logo" onerror="this.style.display='none'">
+                </a>
+                <hr class="divider">
+                <p class="subtitle">Internal Systems Portal</p>
+
+                <div class="input-field">
+                    <input id="nameInput" type="email" placeholder="e.g. juan@launchpadph.com" autocomplete="email" autocapitalize="none" spellcheck="false" inputmode="email" aria-label="Email address">
+                    <label for="nameInput">Email address</label>
+                </div>
+
+                <div class="pin-header">
+                    <span>Enter your PIN</span>
+                </div>
+                <div class="pin-row" id="pinRow" role="group" aria-label="4-digit PIN">
+                    <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="PIN digit 1">
+                    <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="PIN digit 2">
+                    <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="PIN digit 3">
+                    <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="PIN digit 4">
+                </div>
+                <div class="pin-hint" id="pinHint" aria-live="polite"></div>
+                <div class="forgot-pin">Forgot PIN? Contact Admin</div>
+
+                <button class="btn-signin" id="btnSignIn" disabled onclick="doSignIn()">
+                    <span class="btn-text">Sign In</span>
+                    <span class="spinner" aria-hidden="true"></span>
+                </button>
+
+                <footer>
+                    <div class="footer-copyright">
+                        Copyright &copy; 2026 Launchpad Holdings OPC. All Rights Reserved.
+                    </div>
+                    <div class="footer-address">
+                        Unit 3006 One Corporate Centre Building, Julia Vargas Avenue,<br>
+                        Ortigas Center, San Antonio, Pasig City
+                    </div>
+                </footer>
+            </div>
+        </div>
+        </div>
+    </div>
+
+    <script>
+        /* ── Dev Mode: instant redirect ── */
+        if (new URLSearchParams(window.location.search).get('dev') === '1') {
+            window.location.replace('index.html?dev=1');
+        }
+
+        /* ── Black Hole accretion disk (login illustration) ── */
+        (function() {
+            const stage    = document.getElementById('blackholeStage');
+            const bgCanvas = document.getElementById('bhCanvasBg');
+            const fgCanvas = document.getElementById('bhCanvasFg');
+            const logo     = document.getElementById('bhCenterLogo');
+            if (!stage || !bgCanvas || !fgCanvas) return;
+
+            const ctx   = bgCanvas.getContext('2d');
+            const fgCtx = fgCanvas.getContext('2d');
+            if (!ctx || !fgCtx) return;
+
+            // ── Props (from the Originkit preview) ──
+            const particleCount   = 180;
+            const particleSizeRaw = 9;    // 1–50 slider scale
+            const outerRadiusPct  = 100;  // % of half-canvas width
+            const tiltDeg         = 17;
+            const tiltSidewayDeg  = 159;
+            const trailRaw        = 40;   // 0–50
+            const orbitSpeed      = 4;
+            const pullSpeed       = 0;
+            const colors          = ['#ffffff', '#bcdcff'];
+            const PERSPECTIVE     = 1300;
+
+            const particleSize = 0.5 + (Math.max(1, Math.min(50, particleSizeRaw)) - 1) * (4 / 49);
+            const trailAlpha   = Math.max(0.02, 1 - (Math.max(0, trailRaw) / 50) * 0.98);
+            const tiltRad        = (tiltDeg * Math.PI) / 180;
+            const tiltSidewayRad = (tiltSidewayDeg * Math.PI) / 180;
+
+            let voidRadius = 60;
+            let size = { w: 600, h: 600 };
+            let particles = [];
+
+            function outerRadFromSize(w) {
+                const maxR = w / 2;
+                const pct = Math.max(0, Math.min(100, outerRadiusPct)) / 100;
+                return voidRadius + pct * (maxR - voidRadius);
+            }
+
+            function initParticles(count, horizonRad, outerRad) {
+                const pts = [];
+                for (let i = 0; i < count; i++) {
+                    const radius = horizonRad + Math.pow(Math.random(), 2) * (outerRad - horizonRad);
+                    pts.push({
+                        angle: Math.random() * Math.PI * 2,
+                        radius,
+                        height: (Math.random() - 0.5) * 16,
+                        speedOffset: 0.75 + Math.random() * 0.5,
+                        colorIdx: Math.floor(Math.random() * colors.length),
+                    });
+                }
+                particles = pts;
+            }
+
+            function resize() {
+                const rect = stage.getBoundingClientRect();
+                const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+                const w = rect.width, h = rect.height;
+                if (w === 0 || h === 0) return;
+                size = { w, h };
+                [bgCanvas, fgCanvas].forEach(c => {
+                    c.width = w * dpr;
+                    c.height = h * dpr;
+                    c.style.width = w + 'px';
+                    c.style.height = h + 'px';
+                });
+                if (logo) {
+                    const lr = logo.getBoundingClientRect();
+                    voidRadius = Math.max(lr.width, lr.height) / 2 * 0.85;
+                }
+                initParticles(particleCount, voidRadius, outerRadFromSize(w));
+            }
+
+            const ro = new ResizeObserver(resize);
+            ro.observe(stage);
+            if (logo && !logo.complete) {
+                logo.addEventListener('load', resize);
+            }
+            resize();
+
+            let lastTime = performance.now();
+            function draw(now) {
+                const dt = Math.min((now - lastTime) / 16.667, 3);
+                lastTime = now;
+                const { w, h } = size;
+                const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                fgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ctx.globalAlpha = 1.0;
+                fgCtx.globalAlpha = 1.0;
+
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.fillStyle = `rgba(0, 0, 0, ${trailAlpha})`;
+                ctx.fillRect(0, 0, w, h);
+                ctx.globalCompositeOperation = 'source-over';
+
+                fgCtx.globalCompositeOperation = 'destination-out';
+                fgCtx.fillStyle = `rgba(0, 0, 0, ${trailAlpha})`;
+                fgCtx.fillRect(0, 0, w, h);
+                fgCtx.globalCompositeOperation = 'source-over';
+
+                const outerRad = outerRadFromSize(w);
+                const voidCx = w / 2, voidCy = h / 2;
+
+                const backgroundParticles = [];
+                const foregroundParticles = [];
+
+                for (let i = 0; i < particles.length; i++) {
+                    const pt = particles[i];
+                    const speedFactor = Math.sqrt(voidRadius / Math.max(pt.radius, 10));
+                    const localOrbitSpeed = orbitSpeed * speedFactor * pt.speedOffset;
+                    const localPullSpeed = pullSpeed * speedFactor * pt.speedOffset;
+                    pt.angle += localOrbitSpeed * 0.012 * dt;
+                    pt.radius -= localPullSpeed * dt;
+
+                    if (pt.radius < voidRadius) {
+                        pt.radius = voidRadius + 0.7 * (outerRad - voidRadius) + Math.random() * 0.3 * (outerRad - voidRadius);
+                        pt.angle = Math.random() * Math.PI * 2;
+                        pt.height = (Math.random() - 0.5) * 16;
+                        continue;
+                    }
+
+                    const cosA = Math.cos(pt.angle), sinA = Math.sin(pt.angle);
+                    const x_base = pt.radius * cosA;
+                    const y_base = pt.height;
+                    const z_base = pt.radius * sinA;
+
+                    const x1 = x_base;
+                    const y1 = y_base * Math.cos(tiltRad) + z_base * Math.sin(tiltRad);
+                    const z1 = -y_base * Math.sin(tiltRad) + z_base * Math.cos(tiltRad);
+
+                    const x3d = x1 * Math.cos(tiltSidewayRad) - y1 * Math.sin(tiltSidewayRad);
+                    const y3d = x1 * Math.sin(tiltSidewayRad) + y1 * Math.cos(tiltSidewayRad);
+                    const z3d = z1;
+
+                    const scale = PERSPECTIVE / (PERSPECTIVE + z3d);
+                    const px = voidCx + x3d * scale;
+                    const py = voidCy + y3d * scale;
+                    if (px < -30 || px > w + 30 || py < -30 || py > h + 30) continue;
+
+                    const sz = Math.max(0.3, particleSize * scale);
+                    const alpha = Math.max(0.35, 1 - ((z3d + outerRad) / (2 * outerRad)) * 0.45);
+                    const color = colors[pt.colorIdx % colors.length];
+                    const projected = { x: px, y: py, size: sz, alpha, z: z3d, color };
+
+                    if (z3d >= 0) backgroundParticles.push(projected);
+                    else foregroundParticles.push(projected);
+                }
+
+                backgroundParticles.sort((a, b) => b.z - a.z);
+                foregroundParticles.sort((a, b) => b.z - a.z);
+
+                for (let i = 0; i < backgroundParticles.length; i++) {
+                    const p = backgroundParticles[i];
+                    ctx.globalAlpha = p.alpha;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1.0;
+
+                for (let i = 0; i < foregroundParticles.length; i++) {
+                    const p = foregroundParticles[i];
+                    fgCtx.globalAlpha = p.alpha;
+                    fgCtx.fillStyle = p.color;
+                    fgCtx.beginPath();
+                    fgCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    fgCtx.fill();
+                }
+                fgCtx.globalAlpha = 1.0;
+
+                requestAnimationFrame(draw);
+            }
+            requestAnimationFrame(draw);
+        })();
+
+        /* ── Starfield background ── */
+        (function() {
+            const field = document.getElementById('starfield');
+            if (!field) return;
+            const count = window.innerWidth < 500 ? 45 : 70;
+            const frag = document.createDocumentFragment();
+            for (let i = 0; i < count; i++) {
+                const s = document.createElement('div');
+                const size = Math.random() * 1.8 + 0.6;
+                s.style.cssText = 'position:absolute;border-radius:50%;background:#fff;'
+                    + 'width:' + size + 'px;height:' + size + 'px;'
+                    + 'top:' + (Math.random() * 100) + '%;left:' + (Math.random() * 100) + '%;'
+                    + 'opacity:' + (Math.random() * 0.6 + 0.15) + ';';
+                frag.appendChild(s);
+            }
+            field.appendChild(frag);
+        })();
+
+        /* ── Splash screen — video version ── */
+        (function() {
+            const video  = document.getElementById('splashVideo');
+            const circle = document.getElementById('splashCircle');
+            const splash = document.getElementById('splash');
+
+            function triggerWipe() {
+                circle.style.transition = 'none';
+                circle.style.width  = '0';
+                circle.style.height = '0';
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                    circle.classList.add('grow');
+                }));
+                setTimeout(() => {
+                    splash.classList.add('done');
+                    circle.style.display = 'none';
+                }, 600);
+            }
+
+            // Trigger wipe when video ends
+            video.addEventListener('ended', triggerWipe);
+
+            // Fallback: if video fails to load/play, skip splash after 4s
+            video.addEventListener('error', () => setTimeout(triggerWipe, 100));
+            setTimeout(() => {
+                if (!splash.classList.contains('done')) triggerWipe();
+            }, 4000);
+        })();
+
+        /* ── Redirect if already logged in ── */
+        try {
+            const sess = JSON.parse(sessionStorage.getItem('lp_session') || 'null');
+            if (sess && (sess.token || sess.id)) window.location.replace('menu.html');
+        } catch {}
+
+        const API = window.location.origin;
+
+        /* ── PIN input wiring ── */
+        const digits = Array.from(document.querySelectorAll('.pin-digit'));
+
+        digits.forEach((d, i) => {
+            d.addEventListener('input', e => {
+                const v = e.target.value.replace(/\D/g, '');
+                e.target.value = v ? v[0] : '';
+                e.target.classList.toggle('filled', !!v);
+                if (v && i < digits.length - 1) digits[i + 1].focus();
+                checkReady();
+            });
+            d.addEventListener('keydown', e => {
+                if (e.key === 'Backspace' && !d.value && i > 0) {
+                    digits[i - 1].value = '';
+                    digits[i - 1].classList.remove('filled');
+                    digits[i - 1].focus();
+                    checkReady();
+                }
+                if (e.key === 'Enter') doSignIn();
+            });
+            d.addEventListener('paste', e => {
+                e.preventDefault();
+                const text = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
+                digits.forEach((dd, ii) => {
+                    dd.value = text[ii] || '';
+                    dd.classList.toggle('filled', !!dd.value);
+                });
+                const firstEmpty = digits.findIndex(dd => !dd.value);
+                (firstEmpty === -1 ? digits[digits.length - 1] : digits[firstEmpty]).focus();
+                checkReady();
+            });
+        });
+
+        document.getElementById('nameInput').addEventListener('input', checkReady);
+        document.getElementById('nameInput').addEventListener('keydown', e => {
+            if (e.key === 'Enter') digits[0].focus();
+        });
+
+        const getPin = () => digits.map(d => d.value).join('');
+
+        function checkReady() {
+            const email = document.getElementById('nameInput').value.trim();
+            const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+            document.getElementById('btnSignIn').disabled = !validEmail || getPin().length !== 4;
+        }
+
+        function setPinError(msg) {
+            const hint = document.getElementById('pinHint');
+            digits.forEach(d => { d.classList.add('error'); d.value = ''; d.classList.remove('filled'); });
+            hint.textContent = msg;
+            hint.classList.add('err');
+            checkReady();
+            setTimeout(() => {
+                digits.forEach(d => d.classList.remove('error'));
+                hint.textContent = '';
+                hint.classList.remove('err');
+                digits[0].focus();
+            }, 1500);
+        }
+
+        async function doSignIn() {
+            const email = document.getElementById('nameInput').value.trim().toLowerCase();
+            const pin   = getPin();
+            if (!email || pin.length !== 4) return;
+
+            const btn = document.getElementById('btnSignIn');
+            btn.classList.add('loading');
+            btn.disabled = true;
+
+            try {
+                const r = await fetch(`${API}/api/profiles/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, pin })
+                });
+                if (r.ok) {
+                    const profile = await r.json();
+                    sessionStorage.setItem('lp_session', JSON.stringify(profile));
+                    window.location.replace('menu.html');
+                } else if (r.status === 429) {
+                    const retrySecs = r.headers.get('Retry-After');
+                    const mins = retrySecs ? Math.ceil(parseInt(retrySecs, 10) / 60) : null;
+                    setPinError(mins ? `Too many attempts. Try again in ${mins} min.` : 'Too many attempts. Try again later.');
+                    btn.classList.remove('loading'); btn.disabled = false;
+                } else {
+                    setPinError('Incorrect email or PIN. Try again.');
+                    btn.classList.remove('loading'); btn.disabled = false;
+                }
+            } catch {
+                setPinError('Server error. Please try again.');
+                btn.classList.remove('loading'); btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

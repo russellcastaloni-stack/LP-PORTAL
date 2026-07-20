@@ -1,0 +1,3492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Launchpad Portal</title>
+    <link rel="icon" type="image/png" href="ICONS/LPwhite.png">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* ── Page-switch loading overlay (requested 2026-07 — "lagyan natin
+           ng loaders kada magswitch ng pages di daw nakikita na nag switch
+           na pala since medyo magkakamuka ang forms"). Visible by default
+           (no JS needed to show it) so it covers the very first paint of a
+           freshly-loaded page; goToPage() re-shows it right before
+           navigating away, and the load listener hides it once THIS page is
+           ready. Same block is duplicated in every page for the same reason
+           the nav sidebar is — no shared-component system exists yet. ── */
+        #pageLoader {
+            position: fixed;
+            top: var(--navbar-h, 56px); left: 56px; right: 0; bottom: 0;
+            z-index: 9000;
+            background: #fff;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 14px;
+            transition: opacity .18s ease;
+        }
+        #pageLoader.pl-hide { opacity: 0; pointer-events: none; }
+        .pl-spinner {
+            width: 40px; height: 40px;
+            border: 4px solid #e3e7ee; border-top-color: #1A2B45;
+            border-radius: 50%;
+            animation: pl-spin .7s linear infinite;
+        }
+        @keyframes pl-spin { to { transform: rotate(360deg); } }
+        #pageLoaderText { font-size: 13px; font-weight: 600; color: #7a8699; }
+
+        /* ── Top navbar (formerly the in-flow "session bar") ──
+           Now a real fixed, full-width navbar (Reddit-style) that sits
+           permanently above everything, instead of scrolling with the
+           form. #navSidebar sits below it (top: var(--navbar-h)), so the
+           two never overlap and there's no z-index/stacking fight. */
+        :root { --navbar-h: 56px; }
+        .session-bar {
+            display: flex; align-items: center; gap: 10px;
+            background: #2C3E50; color: white;
+            padding: 10px 20px; font-size: 13px;
+            flex-wrap: nowrap; min-width: 0;
+            position: fixed; top: 0; left: 0; right: 0;
+            height: var(--navbar-h); box-sizing: border-box;
+            z-index: 9600; box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+        }
+        .session-logo { display: none; } /* unused leftover, kept harmless */
+
+        /* Mascot button — plain static logo now, links back to Home. The
+           app-switcher menu it used to open on hover/click moved to the
+           sidebar's Home button (see .nav-home-wrap below), so it no
+           longer needs to morph into a hamburger glyph. */
+        .nav-mascot-wrap { position: relative; flex-shrink: 0; }
+        .nav-mascot-btn {
+            position: relative; width: 34px; height: 34px;
+            border: none; background: transparent; cursor: pointer; padding: 0;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .nav-mascot-img {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            height: 28px; width: auto; object-fit: contain;
+        }
+
+        /* Home nav item — expands into an inline tree of quick links
+           (Dashboard/Quotations/Job Orders/Proofing) right in the sidebar
+           itself, instead of a floating dropdown card. The tree only
+           actually opens once the sidebar is in its hover-expanded state
+           — no room for labels/branches at the 56px collapsed width. */
+        .nav-home-wrap { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+        .nav-home-chevron {
+            width: 13px; height: 13px; flex-shrink: 0;
+            max-width: 0; overflow: hidden;
+            opacity: 0; transition: opacity .15s ease, transform .2s ease, max-width .22s ease;
+        }
+        #navSidebar.expanded .nav-home-chevron { opacity: .75; max-width: 13px; margin-left: auto; }
+        .nav-home-wrap.open .nav-home-chevron { transform: rotate(180deg); }
+        .nav-home-tree {
+            display: none; position: relative;
+            width: 100%; padding-left: 22px; box-sizing: border-box;
+        }
+        #navSidebar.expanded .nav-home-wrap.open .nav-home-tree { display: flex; flex-direction: column; }
+        .nav-home-tree::before {
+            content: ''; position: absolute;
+            left: 10px; top: 0; bottom: 16px; width: 1px;
+            background: rgba(255,255,255,.16);
+        }
+        .nav-tree-item {
+            position: relative; display: flex; align-items: center; gap: 8px;
+            width: calc(100% - 4px); padding: 6px 8px; margin: 1px 4px 1px 0;
+            border: none; background: transparent; border-radius: 8px;
+            color: #fff; font-size: 12.5px; font-weight: 500;
+            cursor: pointer; text-align: left; white-space: nowrap;
+        }
+        .nav-tree-item::before {
+            content: ''; position: absolute;
+            left: -12px; top: 50%; width: 10px; height: 1px;
+            background: rgba(255,255,255,.16);
+        }
+        .nav-tree-item:hover { background: rgba(255,255,255,.09); }
+        .nav-tree-item.hm-disabled { color: rgba(255,255,255,.4); cursor: default; }
+        .nav-tree-item.hm-disabled:hover { background: none; }
+        .hm-badge {
+            margin-left: auto; font-size: 9px; font-weight: bold;
+            background: #e8eaed; color: #999; border-radius: 10px;
+            padding: 2px 7px; letter-spacing: 0.5px;
+        }
+
+        /* Sign Out — pinned to the very bottom of the sidebar, just below Settings */
+        .nav-signout-btn .nav-label { color: #ff8a80; }
+        #navSidebar .nav-signout-btn:hover { background: rgba(211,47,47,.16); }
+
+        /* Avatar */
+        .session-avatar {
+            width: 34px; height: 34px; background: #1976d2;
+            border-radius: 50%; display: flex; align-items: center;
+            justify-content: center; font-weight: bold; font-size: 14px;
+            flex-shrink: 0; color: white;
+        }
+        /* Info block */
+        .session-info { min-width: 0; max-width: 160px; position: relative; }
+        .nav-page-title {
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            font-size: 14px; font-weight: 600; color: #fff; opacity: 0.85;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            max-width: 220px; pointer-events: none;
+            text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .nav-bar-spacer { flex: 1; min-width: 8px; }
+        .session-name {
+            font-weight: bold; font-size: 14px; cursor: pointer;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .session-role {
+            font-size: 11px; opacity: 0.65; margin-top: 1px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        /* Dev profile dropdown */
+        #devProfileDropdown {
+            display: none; position: absolute; left: 0; top: calc(100% + 6px);
+            background: white; border: 1px solid #e0e0e0; border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.18); min-width: 220px;
+            z-index: 1001; overflow: hidden;
+        }
+
+        /* Right actions */
+        .session-actions { display: flex; gap: 6px; flex-shrink: 0; }
+        .btn-session-action {
+            background: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.25);
+            color: white; border-radius: 5px;
+            padding: 6px 11px; font-size: 12px; font-weight: bold;
+            cursor: pointer; white-space: nowrap; min-height: 34px;
+            touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+        }
+        .btn-session-action:hover { background: rgba(255,255,255,0.22); }
+        @media (min-width: 500px) {
+            .session-bar { padding: 10px 16px; }
+            .session-avatar { width: 36px; height: 36px; font-size: 15px; }
+            .btn-session-action { padding: 7px 13px; font-size: 13px; }
+        }
+
+        /* ── Suggestion FAB + modal ── */
+        .suggest-fab {
+            position: fixed; right: 24px; bottom: 24px;
+            width: 52px; height: 52px; border-radius: 50%;
+            background: #1976d2; color: #fff; border: none;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px; cursor: pointer; z-index: 9000;
+            transition: transform .15s ease, background .15s ease;
+        }
+        .suggest-fab:hover { background: #1565c0; transform: scale(1.06); }
+        .suggest-modal-bg {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+            z-index: 10000; align-items: center; justify-content: center;
+        }
+        .suggest-modal-bg.open { display: flex; }
+        .suggest-modal {
+            background: #fff; border-radius: 12px; width: 420px; max-width: 90vw;
+            padding: 22px; box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+        }
+        .suggest-modal h3 { margin: 0 0 4px; font-size: 17px; color: #1A2B45; }
+        .suggest-modal p { margin: 0 0 14px; font-size: 12px; color: #888; }
+        .suggest-modal textarea {
+            width: 100%; min-height: 110px; resize: vertical;
+            border: 1.5px solid #dfe4ea; border-radius: 8px; padding: 10px 12px;
+            font-size: 13px; font-family: inherit; box-sizing: border-box;
+        }
+        .suggest-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+        .suggest-modal-actions button {
+            border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px;
+            font-weight: bold; cursor: pointer;
+        }
+        .suggest-btn-cancel { background: #eef1f5; color: #555; }
+        .suggest-btn-submit { background: #1976d2; color: #fff; }
+        .suggest-btn-submit:disabled { opacity: .6; cursor: default; }
+        .suggest-modal-msg { font-size: 12px; margin-top: 8px; min-height: 16px; }
+        .suggest-modal-msg.ok { color: #2e7d32; }
+        .suggest-modal-msg.err { color: #d32f2f; }
+
+        /* One-shot confirmation toast (used by the suggestion form, reusable
+           elsewhere via showToast()). Fires once, auto-hides, never stacks. */
+        .lp-toast {
+            position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%) translateY(20px);
+            background: #1A2B45; color: #fff; padding: 12px 20px; border-radius: 8px;
+            font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+            z-index: 10500; opacity: 0; pointer-events: none;
+            transition: opacity .25s ease, transform .25s ease;
+            display: flex; align-items: center; gap: 8px; max-width: 80vw;
+        }
+        .lp-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .lp-toast.ok::before { content: '✓'; color: #4caf50; font-weight: 800; }
+        .lp-toast.err::before { content: '⚠'; color: #ff8a65; }
+
+        /* ── Parked Quotes (header dropdown) ── */
+        .parked-tray {
+            position: relative;
+            display: inline-flex;
+        }
+
+        /* The panel itself — anchored under the header button */
+        .parked-panel {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            background: white;
+            width: min(280px, 90vw);
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            transition: max-height 0.2s ease, opacity 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            border-radius: 10px;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.22);
+            z-index: 650;
+            pointer-events: none;
+        }
+        .parked-panel.open {
+            max-height: 70vh;
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .parked-panel-inner {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            max-height: 70vh;
+        }
+        .parked-panel-header {
+            background: #2C3E50;
+            color: white;
+            padding: 10px 14px;
+            font-size: 13px;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+            flex-shrink: 0;
+            border-radius: 10px 10px 0 0;
+        }
+        .parked-list {
+            overflow-y: auto;
+            flex: 1;
+            padding: 6px;
+        }
+        .parked-empty {
+            text-align: center;
+            color: #aaa;
+            font-size: 13px;
+            padding: 24px 12px;
+        }
+        .parked-card {
+            background: #f4f7fc;
+            border: 1px solid #d5dfe9;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 7px;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .parked-card:hover { background: #eaf0fb; border-color: #1976d2; }
+        .parked-card-ctrl {
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            font-weight: bold;
+            color: #1976d2;
+            margin-bottom: 2px;
+        }
+        .parked-card-company {
+            font-size: 13px;
+            font-weight: bold;
+            color: #1A2B45;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 2px;
+        }
+        .parked-card-meta {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 8px;
+        }
+        .parked-card-actions {
+            display: flex;
+            gap: 6px;
+        }
+        .btn-parked-load {
+            flex: 1;
+            background: #1976d2;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 8px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-parked-load:hover { background: #1565c0; }
+        .btn-parked-remove {
+            background: none;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 5px 8px;
+            font-size: 13px;
+            cursor: pointer;
+            color: #aaa;
+        }
+        .btn-parked-remove:hover { color: #d32f2f; border-color: #d32f2f; }
+
+        /* Inline count badge inside the header button */
+        .parked-count {
+            background: #d32f2f;
+            color: white;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 1px 6px;
+            min-width: 16px;
+            text-align: center;
+            display: none;
+            margin-left: 4px;
+        }
+        .parked-count.visible { display: inline-block; }
+
+        /* Park button style — sized/shaped to match .btn-preview-main/.btn-submit
+           (same padding, font-size, border-radius, shadow) so the action row
+           reads as one consistent set of buttons; the lighter purple fill +
+           border is what marks Park as the secondary/tertiary action instead
+           of a size/shape mismatch doing that job by accident. */
+        .btn-park {
+            background: #f8f0ff;
+            color: #7c3aed;
+            border: 1.5px solid #c4b5fd;
+            padding: 15px 20px;
+            font-size: 15px;
+            cursor: pointer;
+            box-shadow: 0px 3px 1px -2px rgba(0,0,0,0.2),0px 2px 2px 0px rgba(0,0,0,0.14),0px 1px 5px 0px rgba(0,0,0,0.12);
+            transition: background 0.15s, border-color 0.15s, box-shadow 0.2s;
+        }
+        .btn-park:hover {
+            background: #ede9fe;
+            border-color: #7c3aed;
+            box-shadow: 0px 2px 4px -1px rgba(0,0,0,0.2),0px 4px 5px 0px rgba(0,0,0,0.14),0px 1px 10px 0px rgba(0,0,0,0.12);
+        }
+        .btn-park { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+        .btn-parked-load, .btn-parked-remove { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+        .btn-parked-load:disabled, .btn-parked-remove:disabled {
+            background: #f4f6f8 !important;
+            color: #555 !important;
+            border: 1px solid #d5dce5 !important;
+            cursor: default !important;
+        }
+
+        /* Sig preview */
+        .sig-preview-box {
+            margin-top: 10px; padding: 10px;
+            background: #f8f9fa; border: 1px dashed #c5d5f0;
+            border-radius: 6px; text-align: center;
+        }
+        .sig-preview-box img { max-height: 60px; max-width: 100%; object-fit: contain; }
+        .sig-preview-box span { font-size: 11px; color: #aaa; }
+
+        /* Page header */
+        .page-header { text-align: center; margin-bottom: 12px; }
+        .page-header img { max-width: min(200px, 55vw); height: auto; margin-bottom: 8px; }
+        .page-header .addr { font-size: 12px; color: #000; line-height: 1.5; }
+        .page-header h2 { font-size: 18px; text-transform: uppercase; margin-top: 14px; color: #2C3E50; letter-spacing: 1px; }
+        .dev-mode-banner {
+            display: none; background: #f1c40f; color: #1A2B45;
+            text-align: center; font-size: 11px; font-weight: bold;
+            letter-spacing: 1.5px; padding: 5px 12px; border-radius: 4px;
+            margin-top: 8px;
+        }
+        body.is-dev .dev-mode-banner { display: inline-block; }
+        @media (min-width: 500px) {
+            .page-header img { max-width: 250px; }
+            .page-header .addr { font-size: 14px; }
+            .page-header h2 { font-size: 20px; }
+        }
+
+        /* History search box */
+        #historySearch { font-size: 16px !important; }
+
+        /* VAT breakdown — app.js controls display via inline style.
+           We only adjust layout on mobile when it IS visible. */
+        #vatBreakdownRow {
+            width: 100%;
+            text-align: right;
+            margin-bottom: 6px;
+            font-size: 13px;
+            color: #555;
+        }
+        @media (max-width: 560px) {
+            .parked-panel { right: -8px; }
+            .parked-panel.open { width: min(280px, 88vw); }
+            #vatBreakdownRow { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+            #vatBreakdownRow span { margin-left: 0 !important; }
+        }
+        /* ── Client Autocomplete ── */
+        .autocomplete-wrap { position: relative; }
+        .autocomplete-dropdown {
+            display: none; position: absolute; top: calc(100% + 2px); left: 0; right: 0;
+            background: white; border: 1px solid #1976d2; border-radius: 6px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12); z-index: 500;
+            max-height: 220px; overflow-y: auto;
+        }
+        .autocomplete-dropdown.open { display: block; }
+        .ac-item {
+            padding: 10px 12px; cursor: pointer; font-size: 14px;
+            border-bottom: 1px solid #f0f2f5; color: #1A2B45;
+        }
+        .ac-item:last-child { border-bottom: none; }
+        .ac-item:hover, .ac-item.ac-active { background: #f0f4ff; }
+        .ac-item strong { color: #1976d2; }
+        .ac-item .ac-sub { font-size: 11px; color: #888; margin-top: 2px; }
+        .ac-autofilled { background: #f0fff4 !important; border-color: #2e7d32 !important; }
+        /* ── Client Conflict Warning ── */
+        .conflict-modal-bg {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.65); z-index: 9999;
+            align-items: center; justify-content: center;
+        }
+        .conflict-modal-bg.open { display: flex; }
+        .conflict-modal-box {
+            background: white; border-radius: 14px;
+            padding: 36px 32px; max-width: 400px; width: 90%;
+            box-shadow: 0 16px 48px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        .conflict-modal-box .conflict-icon { font-size: 48px; margin-bottom: 16px; }
+        .conflict-modal-box h3 { font-size: 17px; color: #1A2B45; margin-bottom: 12px; }
+        .conflict-modal-box p { font-size: 14px; color: #555; line-height: 1.6; margin-bottom: 20px; }
+        .conflict-modal-box .conflict-hint {
+            font-size: 12px; color: #aaa; border-top: 1px solid #f0f0f0;
+            padding-top: 14px; margin-top: 4px;
+        }
+
+        /* ══════════════════════════════════════════════════════════════
+           Account Settings modal (ported from menu.html — requested
+           2026-07 so it opens in-place instead of navigating away).
+           Every rule is scoped to the acctset- prefix to avoid colliding
+           with this page's own CSS. ══════════════════════════════════ */
+        .acctset-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(15,25,40,0.65);
+            backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+            z-index: 10600; align-items: flex-end; justify-content: center; padding: 0;
+        }
+        .acctset-overlay.open { display: flex; }
+        .acctset-sheet {
+            background: #fff; border-radius: 4px 4px 0 0;
+            width: 100%; max-width: 480px; max-height: 92dvh;
+            overflow-y: auto; -webkit-overflow-scrolling: touch;
+            padding: 0 0 env(safe-area-inset-bottom, 16px);
+            animation: acctsetSheetUp 0.28s cubic-bezier(0.34,1.2,0.64,1) both;
+        }
+        @keyframes acctsetSheetUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .acctset-pill { width: 40px; height: 4px; background: #dde2ea; border-radius: 4px; margin: 12px auto 0; }
+        .acctset-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px 14px; position: sticky; top: 0; background: #fff; z-index: 1;
+            border-bottom: 1px solid #f0f2f5;
+        }
+        .acctset-title { font-size: 17px; font-weight: bold; color: #1A2B45; }
+        .acctset-close {
+            width: 32px; height: 32px; border-radius: 50%; border: none; background: #f0f2f5;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            font-size: 16px; color: #666; transition: background 0.15s;
+        }
+        .acctset-close:hover { background: #e3e7ee; }
+        .acctset-tabs { display: flex; gap: 0; padding: 12px 20px 0; border-bottom: 1px solid #f0f2f5; }
+        .acctset-tab-btn {
+            flex: 1; padding: 9px 4px; border: none; background: none;
+            font-size: 13px; font-weight: bold; color: #aab0bc; cursor: pointer;
+            border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+            letter-spacing: 0.3px;
+        }
+        .acctset-tab-btn.active { color: #1976d2; border-bottom-color: #1976d2; }
+        .acctset-panel { display: none; padding: 20px; }
+        .acctset-panel.active { display: block; }
+        .acctset-field-group { margin-bottom: 16px; }
+        .acctset-field-group label {
+            display: block; font-size: 11px; font-weight: bold; color: #6b7280;
+            text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px;
+        }
+        .acctset-field-group input[type="text"],
+        .acctset-field-group input[type="email"],
+        .acctset-field-group input[type="tel"] {
+            width: 100%; padding: 12px 14px; border: 1px solid rgba(0,0,0,0.23); border-radius: 4px;
+            font-size: 15px; color: #1A2B45; transition: border-color 0.15s; background: #fff;
+        }
+        .acctset-field-group input:focus { outline: none; border-color: #1976d2; border-width: 2px; }
+        .acctset-field-group input:read-only { background: #f8f9fb; color: #9aa3b0; cursor: not-allowed; }
+        .acctset-field-note { font-size: 11px; color: #aab0bc; margin-top: 4px; }
+        .acctset-pin-row { display: flex; gap: 10px; justify-content: center; margin-bottom: 4px; }
+        .acctset-pin-digit {
+            width: 48px; height: 52px; border: 1px solid rgba(0,0,0,0.23); border-radius: 4px;
+            font-size: 19px; text-align: center; font-weight: 500; color: #1A2B45; transition: border-color 0.15s;
+        }
+        @media (max-width: 360px) { .acctset-pin-digit { width: 42px; height: 48px; } }
+        .acctset-pin-digit:focus { outline: none; border-color: #1976d2; border-width: 2px; }
+        .acctset-pin-digit.filled { border-color: #1976d2; background: #e3f2fd; }
+        .acctset-pin-digit.error  { border-color: #d32f2f; background: #fdecea; animation: acctsetShake 0.3s; }
+        @keyframes acctsetShake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+        .acctset-pin-label { font-size: 11px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.8px; margin: 0 0 8px; }
+        .acctset-pin-block { margin-bottom: 30px; }
+        .acctset-pin-block:last-child { margin-bottom: 18px; }
+        .acctset-pin-block + .acctset-pin-block { padding-top: 22px; border-top: 1px solid #f0f2f5; }
+        .acctset-sig-upload {
+            border: 2px dashed #d1d9e6; border-radius: 12px; padding: 20px 16px; text-align: center;
+            cursor: pointer; transition: border-color 0.18s, background 0.18s; position: relative;
+        }
+        .acctset-sig-upload:hover, .acctset-sig-upload.dragover { border-color: #1976d2; background: #f0f4ff; }
+        .acctset-sig-upload input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+        .acctset-sig-upload-icon { font-size: 28px; margin-bottom: 6px; }
+        .acctset-sig-upload-text { font-size: 13px; color: #6b7280; }
+        .acctset-sig-upload-sub { font-size: 11px; color: #aab0bc; margin-top: 3px; }
+        .acctset-sig-upload.hidden { display: none; }
+        .acctset-sig-replace-btn {
+            display: none; margin: 12px auto 0; padding: 9px 18px; background: none;
+            border: 1px solid #d1d9e6; border-radius: 8px; font-size: 13px; font-weight: bold;
+            color: #1A2B45; cursor: pointer; transition: background 0.15s, border-color 0.15s;
+        }
+        .acctset-sig-replace-btn:hover { background: #f0f4ff; border-color: #1976d2; }
+        .acctset-sig-replace-btn.show { display: block; }
+        .acctset-sig-preview-wrap { margin-top: 14px; display: none; position: relative; }
+        .acctset-sig-preview-wrap.show { display: block; }
+        .acctset-sig-preview {
+            max-width: 100%; max-height: 100px; border-radius: 8px; border: 1px solid #e2e8f0;
+            object-fit: contain; display: block; margin: 0 auto;
+        }
+        .acctset-sig-remove {
+            position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%;
+            background: #d32f2f; color: #fff; border: none; font-size: 14px; line-height: 1;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .acctset-status { margin: 0 20px 4px; padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: bold; display: none; }
+        .acctset-status.success { display: block; background: #eafaf1; color: #1e8449; }
+        .acctset-status.error   { display: block; background: #fdedec; color: #b71c1c; }
+        .acctset-btn-save {
+            display: block; width: calc(100% - 40px); margin: 8px 20px 16px; padding: 14px;
+            background: #1A2B45; color: #fff; border: none; border-radius: 4px;
+            font-size: 14px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px;
+            cursor: pointer; transition: background 0.18s, box-shadow 0.18s; min-height: 50px;
+            box-shadow: 0px 3px 1px -2px rgba(0,0,0,0.2),0px 2px 2px 0px rgba(0,0,0,0.14),0px 1px 5px 0px rgba(0,0,0,0.12);
+        }
+        .acctset-btn-save:hover:not(:disabled) { background: #102036; box-shadow: 0px 2px 4px -1px rgba(0,0,0,0.2),0px 4px 5px 0px rgba(0,0,0,0.14),0px 1px 10px 0px rgba(0,0,0,0.12); }
+        .acctset-btn-save:disabled { background: rgba(0,0,0,0.12); color: rgba(0,0,0,0.26); cursor: not-allowed; box-shadow: none; }
+        .acctset-spinner {
+            display: none; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.4);
+            border-top-color: #fff; border-radius: 50%; animation: acctsetSpin 0.6s linear infinite; margin: 0 auto;
+        }
+        @keyframes acctsetSpin { to { transform: rotate(360deg); } }
+        .acctset-btn-save.loading .acctset-btn-save-text { display: none; }
+        .acctset-btn-save.loading .acctset-spinner { display: inline-block; }
+    </style>
+</head>
+<body>
+    <!-- ── Page-switch loading overlay — see CSS comment near #pageLoader.
+         Visible by default; hidden once this page is ready. ── -->
+    <div id="pageLoader">
+        <div class="pl-spinner"></div>
+        <div id="pageLoaderText">Loading…</div>
+    </div>
+    <script>
+        window.goToPage = function(url, label) {
+            var loader = document.getElementById('pageLoader');
+            if (loader) {
+                var text = document.getElementById('pageLoaderText');
+                if (text) text.textContent = label ? ('Loading ' + label + '…') : 'Loading…';
+                loader.classList.remove('pl-hide');
+            }
+            window.location.href = url;
+        };
+        window.addEventListener('load', function() {
+            var loader = document.getElementById('pageLoader');
+            if (!loader) return;
+            setTimeout(function () { loader.classList.add('pl-hide'); }, 200);
+        });
+        // Safety net — never leave the user staring at a spinner forever
+        // even if something later in the page's own init logic hangs.
+        setTimeout(function () {
+            var loader = document.getElementById('pageLoader');
+            if (loader) loader.classList.add('pl-hide');
+        }, 4000);
+    </script>
+    <!-- ── Persistent left icon-rail sidebar (Reddit-style: collapsed by
+         default, expands to show labels via the toggle button below) ──
+         Icons: Chat/Calculator/Calendar/Notepad/Print reuse the existing
+         ICONS/*.png set. Home, Pricelist, Notifications, Settings gear and
+         Account have no matching PNG asset yet, so they use small inline
+         SVGs (no emoji) as placeholders — swap in real PNGs later by
+         replacing the <svg> with an <img src="ICONS/Whatever.png">. -->
+    <div id="navSidebar">
+        <div class="nav-icons">
+            <div class="nav-home-wrap" id="navHomeWrap">
+                <button class="nav-icon" onclick="toggleHomeTree(event)" title="Home" aria-label="Home">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>
+                    <span class="nav-label">Home</span>
+                    <svg class="nav-home-chevron" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="nav-home-tree" id="homeTree">
+                    <button class="nav-tree-item" onclick="goToPage('dashboard.html','Dashboard')">📊 Dashboard</button>
+                    <button class="nav-tree-item" onclick="goToPage('index.html','Quotations')">📄 Quotations</button>
+                    <button class="nav-tree-item" onclick="goToPage('jo.html','Job Orders')">📋 Job Orders</button>
+                    <button class="nav-tree-item" onclick="goToPage('proofing.html','Proofing')">🖨️ Proofing</button>
+                    <button class="nav-tree-item dev-only" onclick="goToPage('admin.html','Admin Dashboard')" style="display:none;">🛠 Admin Dashboard</button>
+                </div>
+            </div>
+            <button class="nav-icon" onclick="togglePricelistPanel()" title="Pricelist" aria-label="Pricelist">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
+                <span class="nav-label">Pricelist</span>
+            </button>
+            <button class="nav-icon" onclick="toggleNotifPanel()" title="Notifications" aria-label="Notifications">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                <span class="nav-label">Notifications</span>
+                <span id="notifBadge" class="nav-badge">0</span>
+            </button>
+            <button class="nav-icon" onclick="chatOpen()" title="Team Chat" aria-label="Team Chat">
+                <img src="/ICONS/Chat.png" onerror="this.style.display='none'">
+                <span class="nav-label">Team Chat</span>
+                <span id="chatBadge" class="nav-badge">0</span>
+            </button>
+            <button class="nav-icon" onclick="toggleToolsPanel()" title="Other Tools" aria-label="Other Tools">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><path d="M2 13h20"/></svg>
+                <span class="nav-label">Other Tools</span>
+            </button>
+        </div>
+        <div class="nav-spacer"></div>
+        <button class="nav-icon" onclick="openAcctSettings()" title="Account Settings" aria-label="Account Settings">
+            <svg width="20" height="20" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="3.2" fill="#fff"/>
+                <g stroke="#fff" stroke-width="2.2" stroke-linecap="round">
+                    <line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/>
+                    <line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/>
+                    <line x1="4.9" y1="4.9" x2="7" y2="7"/><line x1="17" y1="17" x2="19.1" y2="19.1"/>
+                    <line x1="4.9" y1="19.1" x2="7" y2="17"/><line x1="17" y1="7" x2="19.1" y2="4.9"/>
+                </g>
+            </svg>
+            <span class="nav-label">Account Settings</span>
+        </button>
+        <button class="nav-icon nav-signout-btn" onclick="switchUser()" title="Sign Out" aria-label="Sign Out">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff8a80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            <span class="nav-label">Sign Out</span>
+        </button>
+    </div>
+
+    <!-- ── Top Navbar (formerly the in-flow "Session Bar") — now a real
+         fixed-position, full-width navbar living at the body level
+         (outside .container/the form entirely), same as #navSidebar. ── -->
+    <div class="session-bar" id="sessionBar">
+        <!-- Mascot is now a plain static logo linking back to Home — the
+             app-switcher tree it used to open lives on the sidebar's Home
+             button now (see .nav-home-wrap / #homeTree above). -->
+        <div class="nav-mascot-wrap">
+            <button class="nav-mascot-btn" onclick="goToPage('menu.html','Home')" aria-label="Home" title="Home">
+                <img class="nav-mascot-img" src="ICONS/MASCRID.png" alt="" onerror="this.style.display='none'">
+            </button>
+        </div>
+
+        <div class="session-avatar" id="sessionAvatar">?</div>
+        <div class="session-info" id="sessionInfoWrap">
+            <div class="session-name" id="sessionName" onclick="toggleDevDropdown(event)">Loading...</div>
+            <div class="session-role" id="sessionRole"></div>
+            <!-- Dev-only profile switcher dropdown -->
+            <div id="devProfileDropdown">
+                <div style="padding:8px 12px 6px;font-size:10px;font-weight:bold;color:#aaa;letter-spacing:0.5px;border-bottom:1px solid #f0f0f0;">SWITCH PROFILE (DEV)</div>
+                <div id="devProfileList" style="max-height:240px;overflow-y:auto;padding:4px 0;"></div>
+            </div>
+        </div>
+
+        <div class="nav-page-title">Quotation Form</div>
+        <div class="nav-bar-spacer"></div>
+
+        <div class="session-actions">
+            <div class="parked-tray" id="parkedTray">
+                <button class="btn-session-action" onclick="toggleParkedTray()" title="Parked Quotes">
+                    Parked<span class="parked-count" id="parkedCount">0</span>
+                </button>
+                <div class="parked-panel" id="parkedPanel">
+                    <div class="parked-panel-inner">
+                        <div class="parked-panel-header">Parked Quotes</div>
+                        <div class="parked-list" id="parkedList">
+                            <div class="parked-empty">No parked quotes yet.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <button class="btn-session-action" onclick="triggerQuotePdfUpload()">Import PDF</button>
+            <input type="file" id="quotePdfFileInput" accept="application/pdf" style="display:none;" onchange="handleQuotePdfFileSelected(event)">
+            <button class="btn-session-action" onclick="openHistory()">History</button>
+        </div>
+    </div>
+
+    <!-- ── Suggestion FAB + modal ── -->
+    <button class="suggest-fab" id="suggestFab" onclick="openSuggestModal()" title="Send a suggestion" aria-label="Send a suggestion">💡</button>
+    <div class="suggest-modal-bg" id="suggestModalBg" onclick="if(event.target===this) closeSuggestModal()">
+        <div class="suggest-modal">
+            <h3>Send a Suggestion</h3>
+            <p>Got an idea or ran into an issue? Let the team know.</p>
+            <textarea id="suggestText" maxlength="2000" placeholder="Type your suggestion here…"></textarea>
+            <div class="suggest-modal-msg" id="suggestMsg"></div>
+            <div class="suggest-modal-actions">
+                <button class="suggest-btn-cancel" onclick="closeSuggestModal()">Cancel</button>
+                <button class="suggest-btn-submit" id="suggestSubmitBtn" onclick="submitSuggestion()">Submit</button>
+            </div>
+        </div>
+    </div>
+    <div class="lp-toast" id="lpToast"></div>
+
+    <!-- ── Account Settings modal (ported from menu.html so it opens
+         in-place instead of navigating away — requested 2026-07). Every
+         class/id is prefixed acctset- to guarantee no collision with this
+         page's own markup (e.g. index.html already has its own unrelated
+         #sigPreviewImg elsewhere on the page). ── -->
+    <div class="acctset-overlay" id="acctsetOverlay" onclick="acctsetOverlayClick(event)" role="dialog" aria-modal="true" aria-label="Account Settings">
+        <div class="acctset-sheet" id="acctsetSheet">
+            <div class="acctset-pill"></div>
+            <div class="acctset-header">
+                <span class="acctset-title">⚙️ Account Settings</span>
+                <button class="acctset-close" onclick="closeAcctSettings()" aria-label="Close settings">✕</button>
+            </div>
+            <div class="acctset-tabs">
+                <button class="acctset-tab-btn active" onclick="switchAcctSettingsTab('profile')" id="acctsetTab-profile">Profile</button>
+                <button class="acctset-tab-btn" onclick="switchAcctSettingsTab('pin')" id="acctsetTab-pin">Change PIN</button>
+                <button class="acctset-tab-btn" onclick="switchAcctSettingsTab('signature')" id="acctsetTab-signature">E-Signature</button>
+            </div>
+
+            <div class="acctset-panel active" id="acctsetPanel-profile">
+                <div class="acctset-field-group">
+                    <label for="acctsetName">Full Name</label>
+                    <input type="text" id="acctsetName" maxlength="100" placeholder="Your full name">
+                </div>
+                <div class="acctset-field-group">
+                    <label>Position / Title</label>
+                    <input type="text" id="acctsetPosition" maxlength="100" readonly tabindex="-1">
+                    <div class="acctset-field-note">Contact Admin to change your position.</div>
+                </div>
+                <div class="acctset-field-group">
+                    <label for="acctsetContact">Contact Number</label>
+                    <input type="tel" id="acctsetContact" maxlength="50" placeholder="+63 900 000 0000">
+                </div>
+                <div class="acctset-field-group">
+                    <label>Email</label>
+                    <input type="email" id="acctsetEmail" maxlength="200" readonly tabindex="-1">
+                    <div class="acctset-field-note">Contact Admin to change your email.</div>
+                </div>
+            </div>
+
+            <div class="acctset-panel" id="acctsetPanel-pin">
+                <div class="acctset-pin-block">
+                    <div class="acctset-pin-label">Current PIN</div>
+                    <div class="acctset-pin-row" id="acctsetPinRowCurrent">
+                        <input class="acctset-pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="Current PIN digit 1">
+                        <input class="acctset-pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="Current PIN digit 2">
+                        <input class="acctset-pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="Current PIN digit 3">
+                        <input class="acctset-pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="Current PIN digit 4">
+                    </div>
+                    <div class="acctset-field-note" style="text-align:center;margin-top:6px;" id="acctsetPinCurrentHint">Enter your current PIN to verify.</div>
+                </div>
+                <div class="acctset-pin-block">
+                    <div class="acctset-pin-label">New PIN</div>
+                    <div class="acctset-pin-row" id="acctsetPinRowNew">
+                        <input class="acctset-pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="New PIN digit 1">
+                        <input class="acctset-pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="New PIN digit 2">
+                        <input class="acctset-pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="New PIN digit 3">
+                        <input class="acctset-pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="New PIN digit 4">
+                    </div>
+                </div>
+                <div class="acctset-pin-block">
+                    <div class="acctset-pin-label">Confirm New PIN</div>
+                    <div class="acctset-pin-row" id="acctsetPinRowConfirm">
+                        <input class="acctset-pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="Confirm PIN digit 1">
+                        <input class="acctset-pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="Confirm PIN digit 2">
+                        <input class="acctset-pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="Confirm PIN digit 3">
+                        <input class="acctset-pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="Confirm PIN digit 4">
+                    </div>
+                    <div class="acctset-field-note" style="text-align:center;margin-top:6px;" id="acctsetPinMatchHint">&nbsp;</div>
+                </div>
+            </div>
+
+            <div class="acctset-panel" id="acctsetPanel-signature">
+                <p style="font-size:13px;color:#6b7280;margin-bottom:14px;">
+                    Upload a PNG or JPG of your signature. It will appear on generated quotations and job orders.
+                    Transparent background PNG works best.
+                </p>
+                <div class="acctset-sig-upload" id="acctsetSigDropArea">
+                    <input type="file" id="acctsetSigFileInput" accept="image/png,image/jpeg,image/jpg" onchange="handleAcctSigFile(this)">
+                    <div class="acctset-sig-upload-icon">🖊️</div>
+                    <div class="acctset-sig-upload-text">Tap to upload your signature</div>
+                    <div class="acctset-sig-upload-sub">PNG (transparent bg) or JPG · Max 2 MB</div>
+                </div>
+                <div class="acctset-sig-preview-wrap" id="acctsetSigPreviewWrap">
+                    <img id="acctsetSigPreviewImg" class="acctset-sig-preview" src="" alt="Signature preview">
+                    <button class="acctset-sig-remove" onclick="removeAcctSig()" aria-label="Remove signature">✕</button>
+                </div>
+                <button class="acctset-sig-replace-btn" id="acctsetSigReplaceBtn" onclick="showAcctSigUpload()">Replace Signature</button>
+                <div class="acctset-field-note" style="margin-top:10px;" id="acctsetSigCurrentNote"></div>
+            </div>
+
+            <div class="acctset-status" id="acctsetStatus"></div>
+            <button class="acctset-btn-save" id="acctsetBtnSave" onclick="saveAcctSettings()">
+                <span class="acctset-btn-save-text">Save Changes</span>
+                <span class="acctset-spinner" aria-hidden="true"></span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ── Notifications panel (UI shell only — no backend yet) ── -->
+    <div class="side-panel" id="notifPanel">
+        <div class="side-panel-header">
+            <span class="sp-title">Notifications</span>
+            <button onclick="toggleNotifPanel()">×</button>
+        </div>
+        <div class="side-panel-body">
+            <div class="side-empty-note">No notifications yet.</div>
+        </div>
+    </div>
+
+    <!-- ── Other Tools panel: Calculator/Calendar/Notepad/Print (split out of
+         Settings into its own sidebar menu — requested 2026-07) ── -->
+    <div class="side-panel" id="toolsPanel">
+        <div class="side-panel-header">
+            <span class="sp-title">Other Tools</span>
+            <button onclick="toggleToolsPanel()">×</button>
+        </div>
+        <div class="side-panel-body">
+            <button type="button" class="settings-btn" onclick="toggleToolsPanel();wOpen('calc')"><span class="sb-icon"><img src="/ICONS/Calcu.png" width="18" height="18" onerror="this.style.display='none'"></span> Calculator</button>
+            <button type="button" class="settings-btn" onclick="toggleToolsPanel();wOpen('cal')"><span class="sb-icon"><img src="/ICONS/Calendar.png" width="18" height="18" onerror="this.style.display='none'"></span> Calendar</button>
+            <button type="button" class="settings-btn" onclick="toggleToolsPanel();wOpen('notepad')"><span class="sb-icon"><img src="/ICONS/Note.png" width="18" height="18" onerror="this.style.display='none'"></span> Notepad</button>
+            <button type="button" class="settings-btn" onclick="toggleToolsPanel();wOpen('print')"><span class="sb-icon"><img src="/ICONS/Printer.png" width="18" height="18" onerror="this.style.display='none'"></span> Print</button>
+        </div>
+    </div>
+
+    <!-- ── Account Settings panel (Other Tools moved out — requested 2026-07) ── -->
+
+    <div id="starfield" aria-hidden="true"></div>
+    <div class="container">
+
+        <!-- ── Page Header ── -->
+        <div class="page-header">
+            <img src="ICONS/logo.png" alt="Launchpad Logo" onerror="this.style.display='none'">
+            <div class="addr">
+                Unit 3006 One Corporate Centre Building, Julia Vargas Avenue,<br>
+                Ortigas Center San Antonio Pasig City
+            </div>
+            <div class="dev-mode-banner">⚡ DEV MODE</div>
+        </div>
+
+        <!-- ── Control Number Bar ── -->
+        <div class="ctrl-bar" style="justify-content:flex-end;">
+            <span class="ctrl-label">Control #:</span>
+            <span class="ctrl-number" id="ctrlDisplay">—</span>
+            <span class="ctrl-rev" id="ctrlRevDisplay"></span>
+        </div>
+
+        <!-- ── History Modal ── -->
+        <div class="modal-overlay" id="historyModal">
+            <div class="modal">
+                <div class="modal-header">
+                    <h2>Open Previous Quotes</h2>
+                    <button class="btn-close-modal" onclick="closeHistory()">×</button>
+                </div>
+                <div style="padding: 10px 16px 0; border-bottom: 1px solid #e9ecef;">
+                    <input
+                        type="text"
+                        id="historySearch"
+                        placeholder="Search by serial, company, or project..."
+                        oninput="renderHistory()"
+                        style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;outline:none;"
+                        onfocus="this.style.borderColor='#1976d2'"
+                        onblur="this.style.borderColor='#ddd'"
+                    >
+                    <div id="historyCount" style="font-size:11px;color:#999;text-align:right;padding:4px 2px;"></div>
+                </div>
+                <div class="modal-body" id="historyList">
+                    <div class="history-empty">No saved quotes yet.</div>
+                </div>
+                <div class="modal-footer" id="historyFooter">
+                    <label class="modal-select-all">
+                        <input type="checkbox" id="selectAllCheck" onchange="toggleSelectAll(this)">
+                        Select all
+                    </label>
+                    <span class="delete-selected-count" id="deleteSelCount"></span>
+                    <button class="btn-delete-selected" id="btnDeleteSelected" onclick="deleteSelected()" disabled>
+                        Delete Selected
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── PDF Import "reading…" overlay ──
+             Dedicated element rather than reusing the form's #loading (that
+             one sits inline near the Generate Quote button at the BOTTOM of
+             a potentially long form — invisible without scrolling for a flow
+             that's triggered from the session bar at the top). This is a
+             fixed, centered, unmissable overlay with a real spinner, styled
+             after jo.html's existing .spinner pattern for visual consistency. -->
+        <div class="pdf-import-loading-overlay" id="pdfImportLoading">
+            <div class="pdf-import-loading-box">
+                <div class="pdf-import-spinner"></div>
+                <p id="pdfImportLoadingText">Reading PDF…</p>
+            </div>
+        </div>
+
+        <!-- ── PDF Import Confirm Modal ──
+             Self-contained inline styles rather than reusing .btn-submit/
+             .modal-footer as-is: those carry assumptions from their original
+             context (.btn-submit has `flex:2; margin-top:20px` meant to sit
+             next to .btn-preview-main; .modal-footer defaults to
+             `display:none` and only shows via History's own `.dev-visible`
+             toggle) that would need fighting against here for no benefit. -->
+        <div class="modal-overlay" id="pdfImportModal">
+            <div class="modal" style="max-width:760px;">
+                <div class="modal-header">
+                    <h2>Confirm Extracted Data</h2>
+                    <button class="btn-close-modal" onclick="closePdfImportModal()">×</button>
+                </div>
+                <div class="modal-body">
+                    <div style="font-size:12px;color:#888;margin-bottom:14px;">
+                        Best-effort reading from the uploaded PDF — review and correct anything that's off before filling the form.
+                    </div>
+                    <div class="form-grid" style="margin-bottom:18px;">
+                        <div class="form-group">
+                            <label>Company Name</label>
+                            <input type="text" id="piCompany">
+                        </div>
+                        <div class="form-group">
+                            <label>Date</label>
+                            <input type="text" id="piDate" placeholder="as read from PDF">
+                        </div>
+                        <div class="form-group">
+                            <label>Address</label>
+                            <input type="text" id="piAddress">
+                        </div>
+                        <div class="form-group">
+                            <label>Contact No.</label>
+                            <input type="text" id="piTel">
+                        </div>
+                        <div class="form-group">
+                            <label>TIN Number</label>
+                            <input type="text" id="piTin">
+                        </div>
+                        <div class="form-group">
+                            <label>Attention To</label>
+                            <input type="text" id="piAttentionTo">
+                        </div>
+                        <div class="form-group">
+                            <label>Project Name</label>
+                            <input type="text" id="piProjectName">
+                        </div>
+                        <div class="form-group">
+                            <label>Payment Terms</label>
+                            <input type="text" id="piPaymentTerms">
+                        </div>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                        <strong style="font-size:13px;color:#2c3e50;">Items</strong>
+                        <button type="button" onclick="pdfImportAddItemRow()"
+                            style="background:#f0f4ff;border:1px solid #c5d5f0;color:#1976d2;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:bold;cursor:pointer;">
+                            + Add Row
+                        </button>
+                    </div>
+                    <table id="piItemsTable" style="width:100%;border-collapse:collapse;font-size:13px;">
+                        <thead>
+                            <tr style="text-align:left;border-bottom:2px solid #e9ecef;">
+                                <th style="padding:6px 4px;">Description</th>
+                                <th style="padding:6px 4px;width:110px;">Size (W × H)</th>
+                                <th style="padding:6px 4px;width:60px;">UOM</th>
+                                <th style="padding:6px 4px;width:70px;">Qty</th>
+                                <th style="padding:6px 4px;width:120px;">Unit Price</th>
+                                <th style="width:30px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="piItemsBody"></tbody>
+                    </table>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:10px;padding:14px 16px;border-top:1px solid #e9ecef;">
+                    <button type="button" onclick="closePdfImportModal()"
+                        style="background:#f1f1f1;color:#555;border:none;border-radius:6px;padding:10px 18px;font-size:13px;font-weight:bold;cursor:pointer;">
+                        Cancel
+                    </button>
+                    <button type="button" onclick="confirmPdfImport()"
+                        style="background:#1976d2;color:#fff;border:none;border-radius:6px;padding:10px 18px;font-size:13px;font-weight:bold;cursor:pointer;">
+                        Confirm &amp; Fill Form
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Print Options modal (copies + page range before Direct Print) ── -->
+        <div class="modal-overlay" id="printOptionsModal">
+            <div class="modal" style="max-width:420px;">
+                <div class="modal-header">
+                    <h2>Print Options</h2>
+                    <button class="btn-close-modal" onclick="closePrintOptionsModal()">×</button>
+                </div>
+                <div class="modal-body">
+                    <div style="font-size:12px;color:#888;margin-bottom:14px;word-break:break-word;" id="printOptFilename"></div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Copies</label>
+                            <input type="number" id="printOptCopies" value="1" min="1" max="99">
+                        </div>
+                        <div class="form-group">
+                            <label>Pages (blank = all)</label>
+                            <input type="text" id="printOptPages" placeholder="e.g. 1-3,5">
+                        </div>
+                    </div>
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:10px;padding:14px 16px;border-top:1px solid #e9ecef;">
+                    <button type="button" onclick="closePrintOptionsModal()"
+                        style="background:#f1f1f1;color:#555;border:none;border-radius:6px;padding:10px 18px;font-size:13px;font-weight:bold;cursor:pointer;">
+                        Cancel
+                    </button>
+                    <button type="button" onclick="confirmPrintOptions()"
+                        style="background:#27ae60;color:#fff;border:none;border-radius:6px;padding:10px 18px;font-size:13px;font-weight:bold;cursor:pointer;">
+                        🖨️ Print
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Pricelist floating panel (slides in from the left) ──
+             Back to being the only panel on this page (Messenger embedding
+             was confirmed a dead end — Meta's servers actively reject
+             embedded requests server-side, no client-side workaround), so
+             the tab goes back to being a child of the panel itself instead
+             of a shared stack. -->
+        <div class="pricelist-panel" id="pricelistPanel">
+            <div class="pricelist-panel-header">
+                <div class="pricelist-zoom-controls">
+                    <button type="button" onclick="pricelistZoom(-1)" title="Zoom out">−</button>
+                    <span id="pricelistZoomLabel">80%</span>
+                    <button type="button" onclick="pricelistZoom(1)" title="Zoom in">+</button>
+                </div>
+                <button class="pricelist-panel-close" onclick="togglePricelistPanel()">×</button>
+            </div>
+            <div class="pricelist-zoom-wrap" id="pricelistZoomWrap">
+                <iframe id="pricelistFrame" src="" title="Reference Google Sheet"
+                        style="border:none;background:#fff;"
+                        loading="lazy"></iframe>
+            </div>
+        </div>
+
+        <form id="form">
+            <!-- ── Sales Personnel ── -->
+            <div class="section">
+                <h3>Sales Personnel <span style="font-size:11px;font-weight:normal;color:#1976d2;">● Auto-filled from your profile</span></h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Name</label>
+                        <input type="text" id="salesName" class="locked-field" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Contact Number</label>
+                        <input type="text" id="salesContact" class="locked-field" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Position</label>
+                        <input type="text" id="salesPosition" class="locked-field" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="salesEmail" class="locked-field" readonly>
+                    </div>
+                </div>
+                <div class="sig-preview-box" id="sigPreviewBox" style="display:none;">
+                    <div style="font-size:11px;font-weight:bold;color:#888;margin-bottom:6px;">E-SIGNATURE ON PDF</div>
+                    <img id="sigPreviewImg" src="" alt="Your e-signature">
+                </div>
+                <div class="sig-preview-box" id="sigMissingBox" style="display:none;">
+                    <span>No e-signature on file. Ask your admin to upload one for your profile.</span>
+                </div>
+            </div>
+
+            <!-- ── Client Information ── -->
+            <div class="section">
+                <h3 style="display:flex;align-items:center;justify-content:space-between;">
+                    <span>Client Information</span>
+                    <button type="button" class="btn-clear-section" onclick="clearClientInfo()">Clear Fields</button>
+                </h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Company Name *</label>
+                        <div class="autocomplete-wrap">
+                            <input type="text" id="company" placeholder="Company Name" required style="text-transform:uppercase;"
+                                autocomplete="off"
+                                oninput="this.value=this.value.toUpperCase(); acSearch(this.value)"
+                                onkeydown="acKeydown(event)"
+                                onfocus="loadClientList().then(()=>acSearch(this.value))"
+                                onblur="setTimeout(acClose, 180); setTimeout(()=>acCheckConflictOnBlur(),200)">
+                            <div class="autocomplete-dropdown" id="acDropdown"></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Date *</label>
+                        <input type="date" id="date" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Address</label>
+                        <input type="text" id="address" placeholder="Company Address">
+                    </div>
+                    <div class="form-group">
+                        <label>Contact No. *</label>
+                        <input type="tel" id="tel" placeholder="09123456789" required>
+                    </div>
+                    <div class="form-group">
+                        <label>TIN Number</label>
+                        <input type="text" id="tin" placeholder="###-###-###-#####">
+                    </div>
+                    <div class="form-group">
+                        <label>Attention To *</label>
+                        <input type="text" id="attentionTo" placeholder="Client Name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Lead Time (days)</label>
+                        <input type="number" id="leadTime" value="0" inputmode="numeric">
+                    </div>
+                    <div class="form-group">
+                        <label>Project Name *</label>
+                        <input type="text" id="projectName" placeholder="e.g. Tarpaulin - SM Mall" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Payment Terms *</label>
+                        <select id="paymentTerms" required onchange="toggleOtherPayment()" style="min-height:44px;">
+                            <option value="COD for first time customers">COD for first time customers</option>
+                            <option value="15 days">15 days</option>
+                            <option value="30 days">30 days</option>
+                            <option value="45 days">45 days</option>
+                            <option value="60 days">60 days</option>
+                            <option value="120 days">120 days</option>
+                            <option value="others">Others...</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="otherPaymentGroup" style="display:none;">
+                        <label>Specify Payment Terms *</label>
+                        <input type="text" id="otherPaymentTerms" placeholder="e.g. 50% downpayment, 50% upon delivery">
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Quote Mode Toggle ── -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+                <div style="font-size:13px;color:#555;" id="quoteModeLabel">Standard Quote</div>
+                <button type="button" id="btnToggleGrouped" onclick="toggleGroupedMode()"
+                    style="background:#1976d2;color:white;border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:bold;cursor:pointer;">
+                    Switch to Grouped Quote
+                </button>
+            </div>
+
+            <!-- ── Standard Mode ── -->
+            <div id="standardMode">
+
+            <!-- ── Add Items + Additional Fees — merged into one window per Russell's
+                 request (2026-07): "+ Add Fee" now sits right next to "+ Add Item" in
+                 one toolbar row instead of Additional Fees being its own separate
+                 heading/column-header block below. Flat-fee rows (#flatRateItems)
+                 still append right under the regular items — each row is
+                 self-labeled (placeholder text + its own inline ✕ remove button), so
+                 it doesn't need its own column-header row once there's no separate
+                 section framing it. Underlying arrays/functions (items vs
+                 flatRateItems, clearInHouseItems()/clearFlatRateItems(),
+                 addItem()/addFlatRateItem()) are untouched — layout-only change. ── -->
+            <div class="section">
+                <h3 style="display:flex;align-items:center;justify-content:space-between;">
+                    <span>Add Items:</span>
+                    <button type="button" class="btn-clear-section" onclick="clearInHouseItems()">Clear Fields</button>
+                </h3>
+                <div class="item-header">
+                    <span>Description</span>
+                    <span>Size (W × H)</span>
+                    <span>UOM</span>
+                    <span style="text-align:right;">Unit Price <span style="font-weight:normal;font-size:11px;color:#888;">(auto)</span></span>
+                    <span style="text-align:center;">Qty</span>
+                    <span style="text-align:right;">Subtotal</span>
+                    <span></span>
+                </div>
+                <div id="items" class="item-container"></div>
+                <div id="flatRateItems" class="item-container" style="margin-top:8px;"></div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <button type="button" class="btn btn-add" onclick="addItem()">+ Add Item</button>
+                    <button type="button" class="btn btn-add-flat" onclick="addFlatRateItem()" title="Additional Fees (Installation, Delivery…)">+ Add Fee</button>
+                </div>
+            </div>
+
+            <!-- ── Outsource Items — hidden for new quotes, shown when loading old quotes that have them ── -->
+            <div class="section" id="outsourceSection" style="display:none;">
+                <h3 style="display:flex;align-items:center;justify-content:space-between;">
+                    <span>Fixed Price Items <span style="font-size:12px;font-weight:normal;color:#888;">(base price × multipliers)</span></span>
+                    <button type="button" class="btn-clear-section" onclick="clearOutsourceItems()">Clear Fields</button>
+                </h3>
+                <div class="item-header">
+                    <span>Description</span>
+                    <span>Size (W × H)</span>
+                    <span>UOM</span>
+                    <span style="text-align:right;">Unit Price <span style="font-weight:normal;font-size:11px;color:#888;">(auto)</span></span>
+                    <span style="text-align:center;">Qty</span>
+                    <span style="text-align:right;">Subtotal</span>
+                    <span></span>
+                </div>
+                <div id="outsourceItems" class="item-container"></div>
+                <button type="button" class="btn btn-add-outsource" onclick="addOutsourceItem()">+ Add Fixed Price Item</button>
+            </div>
+
+            </div><!-- /standardMode -->
+
+            <!-- ── Grouped Mode ── -->
+            <div id="groupedMode" style="display:none;">
+                <div id="quoteGroups"></div>
+                <button type="button" onclick="addQuoteGroup()"
+                    style="width:100%;padding:12px;border:2px dashed #1976d2;border-radius:8px;background:none;color:#1976d2;font-size:14px;font-weight:bold;cursor:pointer;margin-bottom:12px;">
+                    + Add Group
+                </button>
+            </div>
+
+            <!-- ── Mode Switch Warning Modal ── -->
+            <div id="modeWarningModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9000;align-items:center;justify-content:center;">
+                <div style="background:white;border-radius:12px;padding:28px 24px;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+                    <div style="font-size:16px;font-weight:bold;color:#2c3e50;margin-bottom:10px;">⚠️ Switch Quote Mode?</div>
+                    <div style="font-size:14px;color:#555;margin-bottom:20px;">Switching modes will clear all current items. This cannot be undone. Continue?</div>
+                    <div style="display:flex;gap:10px;">
+                        <button onclick="cancelModeSwitch()" style="flex:1;padding:12px;border:1px solid #ddd;border-radius:8px;background:white;font-size:14px;font-weight:bold;cursor:pointer;">Cancel</button>
+                        <button onclick="confirmModeSwitch()" style="flex:1;padding:12px;border:none;border-radius:8px;background:#d32f2f;color:white;font-size:14px;font-weight:bold;cursor:pointer;">Clear & Switch</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Grand Total ── -->
+            <div class="grand-total-box" style="display:flex;flex-direction:column;gap:10px;">
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                    <label style="font-size:12px;font-weight:bold;color:#2c3e50;">Payment Details in PDF:</label>
+                    <div style="position:relative;" id="bankDropdownWrapper">
+                        <button type="button" id="bankDropdownBtn" onclick="toggleBankDropdown()">
+                            — Select payment details —
+                            <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:10px;color:#888;">▼</span>
+                        </button>
+                        <div id="bankDropdownMenu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;background:white;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,0.12);z-index:200;min-width:220px;padding:6px 0;">
+                            <label style="display:flex;align-items:center;gap:9px;padding:12px 14px;cursor:pointer;font-size:14px;color:#2c3e50;min-height:48px;">
+                                <input type="checkbox" value="bdo" class="bank-chk" onchange="updateBankLabel()" style="width:18px;height:18px;cursor:pointer;"> Banco De Oro (BDO)
+                            </label>
+                            <label style="display:flex;align-items:center;gap:9px;padding:12px 14px;cursor:pointer;font-size:14px;color:#2c3e50;min-height:48px;">
+                                <input type="checkbox" value="ub" class="bank-chk" onchange="updateBankLabel()" style="width:18px;height:18px;cursor:pointer;"> UnionBank (UB)
+                            </label>
+                            <label style="display:flex;align-items:center;gap:9px;padding:12px 14px;cursor:pointer;font-size:14px;color:#2c3e50;min-height:48px;">
+                                <input type="checkbox" value="gcash" class="bank-chk" onchange="updateBankLabel()" style="width:18px;height:18px;cursor:pointer;"> GCash
+                            </label>
+                        </div>
+                    </div>
+                    <input type="hidden" id="bankDetailsSelect">
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#555;cursor:pointer;font-weight:normal;min-height:36px;">
+                        <input type="checkbox" id="includeVatCheck" onchange="if(this.checked)document.getElementById('vatExclusiveCheck').checked=false;calculateTotals();" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;">
+                        Show VAT breakdown in PDF
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#555;cursor:pointer;font-weight:normal;min-height:36px;">
+                        <input type="checkbox" id="vatExclusiveCheck" onchange="
+                            if(this.checked)document.getElementById('includeVatCheck').checked=false;
+                            var auto=document.getElementById('vatExAutoCheck');
+                            auto.disabled=!this.checked;
+                            if(!this.checked)auto.checked=false;
+                            calculateTotals();
+                        " style="width:16px;height:16px;cursor:pointer;flex-shrink:0;">
+                        VAT exclusive
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#888;cursor:pointer;font-weight:normal;min-height:30px;margin-left:24px;">
+                        <input type="checkbox" id="vatExAutoCheck" disabled onchange="calculateTotals()" style="width:14px;height:14px;cursor:pointer;flex-shrink:0;">
+                        Auto-adjust prices (recompute unit prices to VAT-exclusive &amp; show VAT breakdown) — otherwise just relabels the total
+                    </label>
+                    <!-- ── Discount ── -->
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px;">
+                        <span style="font-size:13px;color:#555;white-space:nowrap;">Discount:</span>
+                        <select id="discountType" onchange="
+                            var v=this.value;
+                            var inp=document.getElementById('discountValue');
+                            var sfx=document.getElementById('discountValueSuffix');
+                            if(v!=='none'){inp.style.display='';sfx.style.display='';sfx.textContent=v==='percent'?'%':'';}
+                            else{inp.style.display='none';sfx.style.display='none';inp.value='';}
+                            calculateTotals();
+                        " style="font-size:13px;padding:5px 28px 5px 8px;border-radius:6px;color:#2c3e50;width:fit-content;flex-shrink:0;">
+                            <option value="none">— None —</option>
+                            <option value="percent">% Percent</option>
+                            <option value="flat">₱ Flat Amount</option>
+                        </select>
+                        <input type="number" id="discountValue" min="0" step="any" placeholder="0"
+                            oninput="calculateTotals()"
+                            style="display:none;width:110px;font-size:13px;padding:5px 8px;border:1px solid #ccd1d9;border-radius:6px;text-align:right;">
+                        <span id="discountValueSuffix" style="display:none;font-size:12px;color:#888;"></span>
+                    </div>
+                </div>
+                <div style="text-align:right;border-top:1px solid #dde3ea;padding-top:10px;">
+                    <div id="vatBreakdownRow" style="display:none;font-size:12px;color:#555;margin-bottom:4px;line-height:1.8;">
+                        <div>Amount before VAT: <strong id="vatBaseAmount">₱ 0.00</strong></div>
+                        <div>VAT 12% (included): <strong id="vatAmount">₱ 0.00</strong></div>
+                    </div>
+                    <div id="discountRow" style="display:none;font-size:13px;color:#b71c1c;margin-bottom:4px;">
+                        Less Discount: <strong id="discountDisplay">− ₱ 0.00</strong>
+                    </div>
+                    <div style="font-size:18px;font-weight:bold;color:#2c3e50;">
+                        <span id="grandTotalLabel">Grand Total:</span> <span id="total">₱ 0.00</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Action Buttons ── -->
+            <div id="actionButtons" style="display:flex;gap:12px;margin-top:4px;flex-wrap:wrap;">
+                <button type="button" id="btnPreviewQuote" class="btn btn-preview-main" onclick="previewCurrentQuote()">Preview Quote</button>
+                <button type="submit" id="btnGenerateQuote" class="btn btn-submit gen-switch" data-state="idle">
+                    <span class="gen-icon-circle">
+                        <svg class="gen-arrow" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19V5m0 14-4-4m4 4 4-4"/></svg>
+                        <svg class="gen-check" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                    </span>
+                    <span class="gen-label" data-idle-text="Generate Quote" data-done-text="Open PDF">Generate Quote</span>
+                </button>
+                <button type="button" id="btnOpenLoaded" class="btn btn-submit" onclick="openLoadedQuotePdf()" style="display:none;">Open PDF</button>
+                <button type="button" id="btnOverwrite" class="btn btn-overwrite" onclick="overwriteQuote()" style="display:none;">↩ Overwrite Existing</button>
+                <button type="button" id="btnRevision" class="btn btn-revision" onclick="generateRevision()" style="display:none;">Generate as Revision</button>
+                <button type="button" id="btnParkQuote" class="btn btn-park" onclick="parkCurrentQuote()" title="Park this quote to work on later">Park Quote</button>
+            </div>
+            <div id="loading" class="loading">Generating PDF... Please wait...</div>
+        </form>
+
+        <!-- ── Dev Tools ── -->
+        <div class="dev-tools" id="devTools">
+            <span class="dev-tools-label">DEV MODE</span>
+            <button type="button" class="btn-dev" onclick="fillSampleData()">Fill Sample Data</button>
+            <button type="button" class="btn-dev" onclick="devGeneratePreview()">Preview PDF (no save)</button>
+        </div>
+    </div>
+
+    <script>
+        /* ── Starfield background ── */
+        (function() {
+            const field = document.getElementById('starfield');
+            if (!field) return;
+            const count = window.innerWidth < 500 ? 45 : 80;
+            const frag = document.createDocumentFragment();
+            for (let i = 0; i < count; i++) {
+                const s = document.createElement('div');
+                const size = Math.random() * 1.8 + 0.6;
+                s.style.cssText = 'position:absolute;border-radius:50%;background:#fff;'
+                    + 'width:' + size + 'px;height:' + size + 'px;'
+                    + 'top:' + (Math.random() * 100) + '%;left:' + (Math.random() * 100) + '%;'
+                    + 'opacity:' + (Math.random() * 0.6 + 0.15) + ';';
+                frag.appendChild(s);
+            }
+            field.appendChild(frag);
+        })();
+
+        // ── Session header injection — must run before any fetch call ─────────
+        (function() {
+            const _origFetch = window.fetch;
+            window.fetch = function(url, opts) {
+                if (typeof url === 'string' && url.includes('/api/')) {
+                    opts = opts ? Object.assign({}, opts) : {};
+                    opts.headers = Object.assign({}, opts.headers || {});
+                    try {
+                        const s = sessionStorage.getItem('lp_session');
+                        if (s) {
+                            const p = JSON.parse(s);
+                            if (p && p.token) opts.headers['Authorization'] = 'Bearer ' + p.token;
+                            else if (p && p.id) opts.headers['X-Session-Id'] = p.id; // legacy fallback
+                        }
+                    } catch {}
+                }
+                return _origFetch.call(this, url, opts);
+            };
+        })();
+
+        // ── Drive-offline health check ────────────────────────────────────────
+        // Runs once on load. If the server's G: drive is disconnected, the
+        // profiles file can't be read and every authenticated endpoint returns
+        // 503 (previously 401, now fixed in server.js). Show a clear banner
+        // so the user knows to reconnect the drive rather than logging out.
+        (function() {
+            var _hcDone = false;
+            function showDriveBanner(msg) {
+                if (document.getElementById('_driveBanner')) return;
+                var b = document.createElement('div');
+                b.id = '_driveBanner';
+                b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#b71c1c;color:white;' +
+                    'padding:10px 16px;font-size:13px;font-weight:bold;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+                b.innerHTML = '⚠️ ' + msg + ' &nbsp;<button onclick="document.getElementById(\'_driveBanner\').remove();checkDriveHealth();" ' +
+                    'style="background:rgba(255,255,255,0.25);border:none;color:white;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;">Retry</button>';
+                document.body ? document.body.prepend(b) : document.addEventListener('DOMContentLoaded', function(){ document.body.prepend(b); });
+            }
+            function checkDriveHealth() {
+                fetch(window.location.origin + '/api/health')
+                    .then(function(r){ return r.json(); })
+                    .then(function(d){
+                        _hcDone = true;
+                        if (!d.ok) {
+                            var msg = !d.drive
+                                ? 'Google Drive is disconnected on the server. Reconnect the G: drive and retry.'
+                                : (!d.profiles ? 'Profiles file is unreadable. Check the G: drive and retry.' : 'Server data unavailable.');
+                            showDriveBanner(msg);
+                        } else {
+                            var old = document.getElementById('_driveBanner');
+                            if (old) old.remove();
+                        }
+                    })
+                    .catch(function(){ /* server itself unreachable — other mechanisms handle this */ });
+            }
+            // Run on load, and re-check whenever a 503 is received anywhere
+            window.addEventListener('load', checkDriveHealth);
+            // Intercept 503 responses to auto-show banner
+            var __orig503 = window.fetch;
+            window.fetch = function(url, opts) {
+                return __orig503.apply(this, arguments).then(function(r) {
+                    if (r.status === 503 && !_hcDone) checkDriveHealth();
+                    return r;
+                });
+            };
+        })();
+
+        let _currentProfile = null;
+        // _IS_DEV is evaluated AFTER checkSession() clears lp_dev_mode for real users.
+        // Use a getter so it reflects the post-checkSession state.
+        let _IS_DEV = new URLSearchParams(window.location.search).get('dev') === '1'
+                     || sessionStorage.getItem('lp_dev_mode') === '1';
+
+        (function checkSession() {
+            try {
+                const raw = sessionStorage.getItem('lp_session');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed && parsed.id) {
+                        _currentProfile = parsed;
+                        // Real user logged in — kill dev mode regardless of URL/storage state
+                        sessionStorage.removeItem('lp_dev_mode');
+                        return;
+                    }
+                }
+            } catch { /* fall through */ }
+
+            if (_IS_DEV) {
+                _currentProfile = {
+                    id: '__dev__', name: 'Dev User', position: 'Developer',
+                    contact: '+63900-000-0000', email: 'dev@launchpadph.com',
+                    signature: null, token: '__dev__', role: 'user'
+                };
+                return;
+            }
+
+            window.location.href = 'login.html';
+        })();
+
+        function switchUser() {
+            if (confirm('Log out and return to the login screen?')) {
+                sessionStorage.removeItem('lp_session');
+                sessionStorage.removeItem('lp_admin_token');
+                window.location.href = 'login.html';
+            }
+        }
+
+        function applyProfile(p) {
+            const isAdmin = p.role === 'admin';
+            document.getElementById('sessionAvatar').textContent = (p.name || '?')[0].toUpperCase();
+            // Swap avatar background to gold for admin accounts
+            document.getElementById('sessionAvatar').style.background = isAdmin ? '#c8952a' : '';
+
+            const nameEl = document.getElementById('sessionName');
+            const badge  = isAdmin
+                ? `<span style="display:inline-block;background:#c8952a;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-left:6px;letter-spacing:0.6px;vertical-align:middle;line-height:1.6;">ADMIN</span>`
+                : '';
+            nameEl.innerHTML = (p.name || '') + badge + (_IS_DEV ? '  ▾' : '');
+
+            document.getElementById('sessionRole').textContent = isAdmin
+                ? (p.position || 'Admin') + ' · All Quotes Visible'
+                : (p.position || '') + (p.email ? '  ·  ' + p.email : '');
+            document.getElementById('salesName').value     = p.name     || '';
+            document.getElementById('salesContact').value  = p.contact  || '';
+            document.getElementById('salesPosition').value = p.position || '';
+            document.getElementById('salesEmail').value    = p.email    || '';
+            if (p.signature) {
+                document.getElementById('sigPreviewImg').src = p.signature;
+                document.getElementById('sigPreviewBox').style.display = 'block';
+                document.getElementById('sigMissingBox').style.display = 'none';
+            } else {
+                document.getElementById('sigPreviewBox').style.display = 'none';
+                document.getElementById('sigMissingBox').style.display = 'block';
+            }
+        }
+
+        // Re-evaluate dev mode AFTER checkSession — real users have lp_dev_mode cleared above
+        _IS_DEV = (_currentProfile && _currentProfile.id === '__dev__')
+               || sessionStorage.getItem('lp_dev_mode') === '1';
+
+        if (_currentProfile) applyProfile(_currentProfile);
+
+        // Show Admin Dashboard link in hamburger for admin-role users
+        if (_currentProfile && _currentProfile.role === 'admin') {
+            document.querySelectorAll('.dev-only').forEach(el => el.style.display = '');
+        }
+
+        if (_IS_DEV) {
+            document.getElementById('devTools').classList.add('show');
+            document.body.classList.add('is-dev');
+            // Show admin link in hamburger
+            document.querySelectorAll('.dev-only').forEach(el => el.style.display = '');
+            const sn = document.getElementById('sessionName');
+            sn.style.cursor = 'pointer';
+            sn.title = 'Switch profile (dev)';
+            sessionStorage.setItem('lp_dev_mode', '1');
+        } else {
+            sessionStorage.removeItem('lp_dev_mode');
+        }
+
+        async function loadDevProfiles() {
+            try {
+                const r = await fetch(window.location.origin + '/api/profiles');
+                const profiles = await r.json();
+                const list = document.getElementById('devProfileList');
+                window._devProfiles = {};
+                profiles.forEach(p => { window._devProfiles[p.id] = p; });
+
+                function makeAllQuotesRow() {
+                    const d = document.createElement('div');
+                    d.style.cssText = 'padding:12px 14px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #f0f0f0;min-height:48px;';
+                    d.onmouseenter = () => d.style.background = '#f4f7fc';
+                    d.onmouseleave = () => d.style.background = '';
+                    d.onclick = () => devSwitchProfile('__dev__');
+                    d.innerHTML = '<div style="width:28px;height:28px;background:#7f5af0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:14px;color:white;flex-shrink:0;">&#8734;</div>'
+                        + '<div><div style="font-weight:bold;color:#7f5af0;">All Quotes (Dev)</div>'
+                        + '<div style="font-size:11px;color:#aaa;">Show every rep&#39;s history</div></div>';
+                    return d;
+                }
+
+                list.innerHTML = '';
+                list.appendChild(makeAllQuotesRow());
+
+                if (!profiles.length) {
+                    const empty = document.createElement('div');
+                    empty.style.cssText = 'padding:10px 14px;font-size:12px;color:#aaa;';
+                    empty.textContent = 'No profiles found';
+                    list.appendChild(empty);
+                    return;
+                }
+                profiles.forEach(p => {
+                    const d = document.createElement('div');
+                    d.style.cssText = 'padding:12px 14px;cursor:pointer;font-size:13px;color:#2c3e50;display:flex;align-items:center;gap:10px;min-height:48px;';
+                    d.onmouseenter = () => d.style.background = '#f4f7fc';
+                    d.onmouseleave = () => d.style.background = '';
+                    d.onclick = () => devSwitchProfile(p.id);
+                    d.innerHTML = '<div style="width:28px;height:28px;background:#1976d2;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;color:white;flex-shrink:0;">'
+                        + (p.name || '?')[0].toUpperCase() + '</div>'
+                        + '<div><div style="font-weight:bold;">' + (p.name || '') + '</div>'
+                        + '<div style="font-size:11px;color:#888;">' + (p.position || '') + '</div></div>';
+                    list.appendChild(d);
+                });
+            } catch(e) {
+                document.getElementById('devProfileList').innerHTML =
+                    '<div style="padding:10px 14px;font-size:12px;color:#d32f2f;">Error loading profiles</div>';
+            }
+        }
+
+        function toggleHomeTree(e) {
+            if (e) e.stopPropagation();
+            document.getElementById('navHomeWrap').classList.toggle('open');
+        }
+
+        function toggleDevDropdown(e) {
+            if (!_IS_DEV) return;
+            if (e) e.stopPropagation();
+            const dd = document.getElementById('devProfileDropdown');
+            dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function devSwitchProfile(id) {
+            let p;
+            if (id === '__dev__') {
+                p = { id: '__dev__', name: 'Dev User', position: 'Developer',
+                      contact: '+63900-000-0000', email: 'dev@launchpadph.com', signature: null };
+            } else {
+                p = window._devProfiles && window._devProfiles[id];
+                if (!p) return;
+            }
+            _currentProfile = p;
+            applyProfile(p);
+            document.getElementById('devProfileDropdown').style.display = 'none';
+            if (document.getElementById('historyModal').classList.contains('open')) renderHistory();
+        }
+
+        if (_IS_DEV) loadDevProfiles();
+
+        // The session bar used to go sticky/fixed on scroll, but that
+        // fought endlessly with the persistent sidebar's stacking context —
+        // simpler and more reliable to just leave it in normal flow at the
+        // top of the page, not fixed at all.
+
+        document.addEventListener('click', function(e) {
+            // Close hamburger if click outside it
+            const homeWrap = document.getElementById('navHomeWrap');
+            if (homeWrap && homeWrap.classList.contains('open') && !e.target.closest('.nav-home-wrap')) {
+                homeWrap.classList.remove('open');
+            }
+            // Close dev dropdown if click outside sessionInfoWrap
+            const switcher = document.getElementById('sessionInfoWrap');
+            if (switcher && !switcher.contains(e.target)) {
+                const dd = document.getElementById('devProfileDropdown');
+                if (dd) dd.style.display = 'none';
+            }
+            const bankWrapper = document.getElementById('bankDropdownWrapper');
+            if (bankWrapper && !bankWrapper.contains(e.target)) {
+                const menu = document.getElementById('bankDropdownMenu');
+                if (menu) menu.style.display = 'none';
+            }
+        });
+
+        function toggleBankDropdown() {
+            const menu = document.getElementById('bankDropdownMenu');
+            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function updateBankLabel() {
+            const checked = Array.from(document.querySelectorAll('.bank-chk:checked'));
+            const btn = document.getElementById('bankDropdownBtn');
+            const hidden = document.getElementById('bankDetailsSelect');
+            const labels = { bdo: 'BDO', ub: 'UnionBank', gcash: 'GCash' };
+            if (checked.length === 0) {
+                btn.textContent = '— Select payment details —';
+                btn.style.color = '#aaa';
+                btn.style.borderColor = '#ddd';
+                hidden.value = '';
+            } else {
+                const names = checked.map(c => labels[c.value] || c.value).join(', ');
+                btn.textContent = names;
+                btn.style.color = '#2c3e50';
+                btn.style.borderColor = '#1b5e20';
+                hidden.value = checked.map(c => c.value).join(',');
+            }
+            // Re-use existing arrow span or create once
+            let arrow = btn.querySelector('.bank-arrow');
+            if (!arrow) {
+                arrow = document.createElement('span');
+                arrow.className = 'bank-arrow';
+                arrow.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:10px;color:#888;';
+                arrow.textContent = '▼';
+                btn.appendChild(arrow);
+            }
+        }
+        /* ── Client Autocomplete ── */
+        let _clientList = [];
+        let _acIndex = -1;
+        const _acAPI = window.location.origin;
+
+        async function loadClientList() {
+            try {
+                const r = await fetch(`${_acAPI}/api/clients`);
+                _clientList = await r.json();
+            } catch (e) { console.warn('[autocomplete] loadClientList failed:', e.message); _clientList = []; }
+        }
+        // Load after DOM ready
+        window.addEventListener('DOMContentLoaded', loadClientList);
+
+        function acCheckConflictOnBlur() {
+            const isAdminUser = _currentProfile && _currentProfile.role === 'admin';
+            if (isAdminUser) return; // admin manages all clients — no conflict restriction
+            const val = (document.getElementById('company')?.value || '').trim().toLowerCase();
+            if (!val) return;
+            const currentRep = (document.getElementById('salesName')?.value || '').trim().toLowerCase();
+            const match = _clientList.find(c => (c.companyName || '').trim().toLowerCase() === val);
+            if (!match) return;
+            const assignedRep = (match.salesRep || '').trim();
+            if (assignedRep && assignedRep.toLowerCase() !== currentRep) {
+                showClientConflict(assignedRep);
+                return;
+            }
+            // Auto-fill MOP if matched
+            if (match.mop) {
+                const mopValues = match.mop.split(',').map(s => s.trim()).filter(Boolean);
+                document.querySelectorAll('.bank-chk').forEach(chk => {
+                    chk.checked = mopValues.includes(chk.value);
+                });
+                if (typeof updateBankLabel === 'function') updateBankLabel();
+            }
+        }
+
+        function acSearch(query) {
+            const dd = document.getElementById('acDropdown');
+            _acIndex = -1;
+            if (!query.trim()) { dd.classList.remove('open'); return; }
+
+            const q = query.trim().toLowerCase();
+            const currentRep = (document.getElementById('salesName')?.value || '').trim().toLowerCase();
+            const isAdminUser = _currentProfile && _currentProfile.role === 'admin';
+
+            // Filter: show clients assigned to current rep OR with no sales rep assigned.
+            // Admin sees all clients regardless of assigned rep.
+            const matches = _clientList.filter(c => {
+                const repMatch = isAdminUser || !c.salesRep || c.salesRep.trim() === '' ||
+                    c.salesRep.trim().toLowerCase() === currentRep;
+                const nameMatch = (c.companyName || '').toLowerCase().includes(q) ||
+                    (c.attentionTo || '').toLowerCase().includes(q);
+                return repMatch && nameMatch;
+            }).slice(0, 10);
+
+            if (!matches.length) { dd.classList.remove('open'); return; }
+
+            dd.innerHTML = matches.map((c, i) => {
+                const name = (c.companyName || '').replace(
+                    new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi'),
+                    '<strong>$1</strong>'
+                );
+                const sub = [c.attentionTo, c.contactNo].filter(Boolean).join(' · ');
+                return `<div class="ac-item" data-i="${i}" onmousedown="acSelect(${i})">
+                    ${name}
+                    ${sub ? `<div class="ac-sub">${sub}</div>` : ''}
+                </div>`;
+            }).join('');
+            dd._matches = matches;
+            dd.classList.add('open');
+        }
+
+        function acSelect(i) {
+            const dd = document.getElementById('acDropdown');
+            const matches = dd._matches || [];
+            const c = matches[i];
+            if (!c) return;
+
+            // Conflict check — assigned to a different sales rep?
+            // Admin accounts bypass this check entirely — they manage all clients.
+            const isAdminUser = _currentProfile && _currentProfile.role === 'admin';
+            const currentRep = (document.getElementById('salesName')?.value || '').trim().toLowerCase();
+            const assignedRep = (c.salesRep || '').trim();
+            if (!isAdminUser && assignedRep && assignedRep.toLowerCase() !== currentRep) {
+                showClientConflict(assignedRep);
+                acClose();
+                return;
+            }
+
+            document.getElementById('company').value     = c.companyName || '';
+            document.getElementById('address').value     = c.address     || '';
+            document.getElementById('tel').value         = c.contactNo   || '';
+            document.getElementById('tin').value         = c.tin         || '';
+            document.getElementById('attentionTo').value = c.attentionTo || '';
+
+            // Refresh control number preview — setting .value directly doesn't fire
+            // the 'input' event, so the debounced peek listener never runs on its own.
+            if (!_loadedFromSnapshot) {
+                peekNextSerial(c.companyName || '').then(serial => {
+                    currentControlNumber = buildControlNumber(serial);
+                    refreshCtrlDisplay();
+                });
+            }
+
+            // Auto-select MOP (bank details) if set in AMI
+            if (c.mop) {
+                const mopValues = c.mop.split(',').map(s => s.trim()).filter(Boolean);
+                document.querySelectorAll('.bank-chk').forEach(chk => {
+                    chk.checked = mopValues.includes(chk.value);
+                });
+                if (typeof updateBankLabel === 'function') updateBankLabel();
+            }
+
+            ['company','address','tel','tin','attentionTo'].forEach(id => {
+                const el = document.getElementById(id);
+                el.classList.add('ac-autofilled');
+                setTimeout(() => el.classList.remove('ac-autofilled'), 1500);
+            });
+
+            acClose();
+        }
+
+        function showClientConflict(salesRepName) {
+            const msg = document.getElementById('clientConflictMsg');
+            msg.innerHTML = `This company is already registered to <strong>${salesRepName}</strong>. Please contact your admin to proceed.`;
+            document.getElementById('clientConflictModal').classList.add('open');
+            // Reset company field so they can't proceed
+            document.getElementById('company').value = '';
+        }
+
+        function acClose() {
+            document.getElementById('acDropdown').classList.remove('open');
+            _acIndex = -1;
+        }
+
+        function acKeydown(e) {
+            const dd = document.getElementById('acDropdown');
+            const items = dd.querySelectorAll('.ac-item');
+            if (!dd.classList.contains('open') || !items.length) return;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                _acIndex = Math.min(_acIndex + 1, items.length - 1);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                _acIndex = Math.max(_acIndex - 1, 0);
+            } else if (e.key === 'Enter' && _acIndex >= 0) {
+                e.preventDefault();
+                items[_acIndex].dispatchEvent(new MouseEvent('mousedown'));
+                return;
+            } else if (e.key === 'Escape') {
+                acClose(); return;
+            } else { return; }
+
+            items.forEach((el, i) => el.classList.toggle('ac-active', i === _acIndex));
+            items[_acIndex]?.scrollIntoView({ block: 'nearest' });
+        }
+
+        function escJs(s) {
+            return String(s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        }
+    </script>
+
+    <script src="app.js?v=4" defer></script>
+    <script src="update-notifier.js" defer></script>
+    <!-- ── Client Conflict Warning Modal (no close — refresh to dismiss) ── -->
+    <div class="conflict-modal-bg" id="clientConflictModal">
+        <div class="conflict-modal-box">
+            <div class="conflict-icon">🚫</div>
+            <h3>Client Already Registered</h3>
+            <p id="clientConflictMsg">This company is already registered to <strong></strong>. Please contact your admin to proceed.</p>
+            <div class="conflict-hint">Refresh the page to go back.</div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+     FLOATING WIDGETS ═══════════════════════════════════════════ -->
+<style>
+/* ── Docked utility panel ── Only one tool is shown at a time, slid in
+   from the right edge, so the form underneath stays fully visible. ── */
+.w-window{position:fixed;top:var(--navbar-h, 56px);right:0;height:calc(100vh - var(--navbar-h, 56px));width:360px;max-width:92vw;background:#fff;box-shadow:-8px 0 32px rgba(0,0,0,.22);z-index:9100;display:flex;flex-direction:column;overflow:hidden;transform:translateX(100%);transition:transform .25s cubic-bezier(.4,0,.2,1);pointer-events:none;}
+.w-window.w-visible{transform:translateX(0);pointer-events:all;}
+.w-titlebar{background:#1A2B45;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:8px;user-select:none;flex-shrink:0;}
+.w-titlebar-icon{font-size:16px;}.w-titlebar-title{flex:1;font-size:14px;font-weight:600;}
+.w-btn-min{background:rgba(255,255,255,.18);border:none;color:#fff;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.w-btn-min:hover{background:rgba(255,255,255,.32);}.w-body{flex:1;overflow:auto;padding:16px;overscroll-behavior:contain;}
+/* Dim the form behind the panel while a tool is open, like a soft modal backdrop */
+#widget-backdrop{position:fixed;inset:0;background:rgba(15,25,40,0.25);z-index:9050;display:none;}
+#widget-backdrop.show{display:block;}
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.cal-nav{background:none;border:1px solid #ddd;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;}.cal-nav:hover{background:#f0f0f0;}
+.cal-month-year{font-weight:700;font-size:15px;cursor:pointer;color:#1A2B45;}.cal-month-year:hover{text-decoration:underline;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
+.cal-dow{text-align:center;font-size:11px;font-weight:700;color:#888;padding:3px 0;}
+.cal-day{text-align:center;font-size:13px;padding:5px 2px;border-radius:6px;cursor:default;line-height:1;}
+.cal-day.today{background:#1A2B45;color:#fff;font-weight:700;}.cal-day.other-month{color:#ccc;}
+.cal-day:not(.other-month):hover{background:#e8eef5;}
+.cal-picker{display:none;gap:6px;flex-wrap:wrap;margin-bottom:10px;}.cal-picker.show{display:flex;}
+.cal-pick-item{padding:4px 10px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid #ddd;}
+.cal-pick-item:hover,.cal-pick-item.active{background:#1A2B45;color:#fff;border-color:#1A2B45;}
+.calc-formula{width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:6px 8px;font-size:13px;margin-bottom:8px;font-family:monospace;}
+.calc-display{background:#f5f7fa;border:1px solid #ddd;border-radius:8px;padding:10px 12px;text-align:right;margin-bottom:8px;}
+.calc-expr{font-size:12px;color:#888;min-height:16px;word-break:break-all;}.calc-result{font-size:24px;font-weight:700;color:#1A2B45;}
+.calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.calc-btn{padding:10px 4px;border:none;border-radius:8px;font-size:15px;cursor:pointer;font-weight:600;background:#f0f2f5;color:#222;transition:background .1s;}
+.calc-btn:hover{background:#e0e4ea;}.calc-btn.op{background:#e8eef5;color:#1A2B45;}.calc-btn.eq{background:#1A2B45;color:#fff;}.calc-btn.eq:hover{background:#243d5e;}
+.calc-btn.clr{background:#fdecea;color:#b71c1c;}.calc-btn.wide{grid-column:span 2;}
+.note-toolbar{display:flex;gap:6px;margin-bottom:8px;align-items:center;}
+.note-add-btn{background:#1A2B45;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:13px;cursor:pointer;}.note-add-btn:hover{background:#243d5e;}
+.note-list{display:flex;flex-direction:column;gap:8px;}
+.note-card{border:1px solid #e0e4ea;border-radius:8px;overflow:hidden;}
+.note-card-head{cursor:pointer;}
+.note-collapse-icon{font-size:11px;color:#888;margin-right:2px;transition:transform .2s;flex-shrink:0;}
+.note-card.collapsed .note-collapse-icon{transform:rotate(-90deg);}
+.note-card.collapsed .note-body-inp{display:none;}
+.note-card-head{display:flex;align-items:center;background:#f5f7fa;padding:5px 8px;gap:6px;}
+.note-title-inp{flex:1;border:none;background:transparent;font-size:13px;font-weight:600;color:#1A2B45;outline:none;min-width:0;}
+.note-del-btn{background:none;border:none;color:#b71c1c;cursor:pointer;font-size:16px;padding:0 2px;line-height:1;}.note-del-btn:hover{color:#d32f2f;}
+.note-body-inp{width:100%;box-sizing:border-box;border:none;border-top:1px solid #e0e4ea;padding:8px;font-size:13px;resize:vertical;min-height:70px;font-family:inherit;outline:none;}
+.note-save-ind{font-size:11px;color:#1b5e20;margin-left:auto;display:none;}
+</style>
+
+<div id="widget-backdrop" onclick="wCloseAll()"></div>
+
+<div class="w-window" id="ww-cal">
+  <div class="w-titlebar">
+    <span class="w-titlebar-icon">&#x1F4C5;</span><span class="w-titlebar-title">Calendar</span>
+    <button class="w-btn-min" onclick="wClose('cal')">&#x2212;</button>
+  </div>
+  <div class="w-body">
+    <div class="cal-header">
+      <button class="cal-nav" onclick="calNav(-1)">&#x2039;</button>
+      <span class="cal-month-year" id="calLabel" onclick="calTogglePicker()"></span>
+      <button class="cal-nav" onclick="calNav(1)">&#x203A;</button>
+    </div>
+    <div class="cal-picker" id="calPicker"></div>
+    <div class="cal-grid"   id="calGrid"></div>
+  </div>
+</div>
+
+<div class="w-window" id="ww-calc">
+  <div class="w-titlebar">
+    <span class="w-titlebar-icon">&#x1F5A9;</span><span class="w-titlebar-title">Calculator</span>
+    <button class="w-btn-min" onclick="wClose('calc')">&#x2212;</button>
+  </div>
+  <div class="w-body">
+    <input class="calc-formula" id="calcFormula" placeholder="Formula e.g. 100*1.12" oninput="calcFormulaInput()" onkeydown="if(event.key==='Enter')calcEval()">
+    <div class="calc-display"><div class="calc-expr" id="calcExpr"></div><div class="calc-result" id="calcResult">0</div></div>
+    <div class="calc-grid">
+      <button class="calc-btn clr wide" onclick="calcClear()">C</button>
+      <button class="calc-btn op" onclick="calcDel()">&#x232B;</button>
+      <button class="calc-btn op" onclick="calcInput('/')">&#xF7;</button>
+      <button class="calc-btn" onclick="calcInput('7')">7</button><button class="calc-btn" onclick="calcInput('8')">8</button><button class="calc-btn" onclick="calcInput('9')">9</button>
+      <button class="calc-btn op" onclick="calcInput('*')">&#xD7;</button>
+      <button class="calc-btn" onclick="calcInput('4')">4</button><button class="calc-btn" onclick="calcInput('5')">5</button><button class="calc-btn" onclick="calcInput('6')">6</button>
+      <button class="calc-btn op" onclick="calcInput('-')">&#x2212;</button>
+      <button class="calc-btn" onclick="calcInput('1')">1</button><button class="calc-btn" onclick="calcInput('2')">2</button><button class="calc-btn" onclick="calcInput('3')">3</button>
+      <button class="calc-btn op" onclick="calcInput('+')">+</button>
+      <button class="calc-btn" onclick="calcInput('0')">0</button><button class="calc-btn" onclick="calcInput('.')">.</button>
+      <button class="calc-btn op" onclick="calcInput('()')">( )</button>
+      <button class="calc-btn eq" onclick="calcEval()">=</button>
+    </div>
+  </div>
+</div>
+
+<div class="w-window" id="ww-notepad">
+  <div class="w-titlebar">
+    <span class="w-titlebar-icon">&#x1F4DD;</span><span class="w-titlebar-title">Notepad</span>
+    <button class="w-btn-min" onclick="wClose('notepad')">&#x2212;</button>
+  </div>
+  <div class="w-body">
+    <div class="note-toolbar">
+      <button class="note-add-btn" onclick="noteAdd()">+ New Note</button>
+      <span class="note-save-ind" id="noteSaveInd">Saved &#x2713;</span>
+    </div>
+    <div class="note-list" id="noteList"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+const API=window.location.origin;
+function getUser(){try{const s=sessionStorage.getItem('lp_session');if(!s)return 'default';const p=JSON.parse(s);return p.id||p.name||'default';}catch{return 'default';}}
+let _ws={cal:{open:false,x:null,y:null},calc:{open:false,x:null,y:null},notepad:{open:false,x:null,y:null},print:{open:false,x:null,y:null},chat:{open:false,x:null,y:null}};
+let _wsT=null;
+async function wLoad(){
+  try{const r=await fetch(API+'/api/widgets/'+encodeURIComponent(getUser()));const d=await r.json();
+    if(d&&typeof d==='object')['cal','calc','notepad'].forEach(k=>{if(d[k])_ws[k]=Object.assign({},_ws[k],d[k]);});
+  }catch{}
+  ['cal','calc','notepad'].forEach(k=>{
+    if(_ws[k].open){
+      _closeOtherTools(k);
+      _wApply(k);
+      if(k==='cal')calRender();
+      if(k==='notepad')noteRender();
+    }
+  });
+}
+function wSave(){clearTimeout(_wsT);_wsT=setTimeout(async()=>{try{await fetch(API+'/api/widgets/'+encodeURIComponent(getUser()),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_ws)});}catch{}},800);}
+function _wApply(k){
+  var el=document.getElementById('ww-'+k);if(!el)return;
+  el.classList.add('w-visible');_setTriggerOpen(true);
+  _showBackdrop();
+}
+function _setTriggerOpen(open){
+  var trig=document.getElementById('wToolsTrigger');
+  if(trig)trig.classList.toggle('w-open',open);
+}
+function _showBackdrop(){var b=document.getElementById('widget-backdrop');if(b)b.classList.add('show');}
+function _hideBackdropIfNoneOpen(){
+  var anyOpen=document.querySelectorAll('.w-window.w-visible').length>0;
+  if(!anyOpen){var b=document.getElementById('widget-backdrop');if(b)b.classList.remove('show');_setTriggerOpen(false);}
+}
+// Only one utility panel is shown at a time — opening one docks it on the
+// right and closes whichever other tool was open, instead of letting
+// windows pile up and overlap the form. DOM-based (not _ws-based) so this
+// also catches the chat window, which tracks its own open state separately.
+function _closeOtherTools(exceptKey){
+  document.querySelectorAll('.w-window.w-visible').forEach(function(el){
+    var k=el.id.replace('ww-','');
+    if(k===exceptKey)return;
+    if(k==='chat'){ if(window.chatClose) window.chatClose(); }
+    else { wClose(k); }
+  });
+}
+window.wCloseAll=function(){ _closeOtherTools(null); };
+// Opens the chosen right-docked tool window — called from the Settings
+// panel's "Other Tools" buttons (Calculator/Calendar/Notepad/Print).
+window.wMenuOpen=function(k){
+  if(k==='chat'){ if(window.chatOpen) window.chatOpen(); }
+  else { wOpen(k); }
+};
+window.wOpen=function(k){
+  // The printer tool (requested 2026-07, "gusto ko naka fullscreen na" —
+  // no more small sliding side panel) isn't part of the docked-widget
+  // system at all anymore: it opens as its own fullscreen screen, handled
+  // entirely by printOpenEmpty() in the print widget's own script.
+  if(k==='print'){ if(window.printOpenEmpty) window.printOpenEmpty(); return; }
+  var el=document.getElementById('ww-'+k);if(!el)return;
+  if(el.classList.contains('w-visible')){wClose(k);return;}
+  _closeOtherTools(k);
+  _ws[k].open=true;_wApply(k);
+  if(k==='cal')calRender();
+  if(k==='notepad')noteRender();
+  wSave();};
+window.wClose=async function(k){var el=document.getElementById('ww-'+k);
+  if(el)el.classList.remove('w-visible');_ws[k].open=false;
+  if(k==='notepad'){clearTimeout(_nT);await noteSaveNow();}
+  _hideBackdropIfNoneOpen();
+  wSave();};
+var _cd=new Date(),_cpMode=null;
+var MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+var MSHORT=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function calRender(){
+  var today=new Date(),yr=_cd.getFullYear(),mo=_cd.getMonth();
+  document.getElementById('calLabel').textContent=MONTHS[mo]+' '+yr;
+  var grid=document.getElementById('calGrid');grid.innerHTML='';
+  ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(function(d){var e=document.createElement('div');e.className='cal-dow';e.textContent=d;grid.appendChild(e);});
+  var first=new Date(yr,mo,1).getDay(),days=new Date(yr,mo+1,0).getDate(),prev=new Date(yr,mo,0).getDate();
+  for(var i=first-1;i>=0;i--){var e=document.createElement('div');e.className='cal-day other-month';e.textContent=prev-i;grid.appendChild(e);}
+  for(var d=1;d<=days;d++){var e=document.createElement('div');e.className='cal-day';e.textContent=d;
+    if(d===today.getDate()&&mo===today.getMonth()&&yr===today.getFullYear())e.classList.add('today');grid.appendChild(e);}
+  var rem=(first+days)%7===0?0:7-(first+days)%7;
+  for(var d=1;d<=rem;d++){var e=document.createElement('div');e.className='cal-day other-month';e.textContent=d;grid.appendChild(e);}
+  if(_cpMode)calShowPicker(_cpMode);
+}
+window.calNav=function(dir){_cd.setMonth(_cd.getMonth()+dir);calRender();};
+window.calTogglePicker=function(){if(_cpMode){_cpMode=null;var p=document.getElementById('calPicker');p.classList.remove('show');p.innerHTML='';}else calShowPicker('month');};
+function calShowPicker(mode){_cpMode=mode;var p=document.getElementById('calPicker');p.innerHTML='';p.classList.add('show');
+  if(mode==='month'){MSHORT.forEach(function(m,i){var e=document.createElement('div');e.className='cal-pick-item'+(i===_cd.getMonth()?' active':'');e.textContent=m;
+      e.onclick=(function(idx){return function(){_cd.setMonth(idx);_cpMode=null;p.classList.remove('show');calRender();};})(i);p.appendChild(e);});
+    var yb=document.createElement('div');yb.className='cal-pick-item';yb.textContent='Year \u2192';yb.style.cssText='width:100%;text-align:center;';
+    yb.onclick=function(){calShowPicker('year');};p.appendChild(yb);
+  }else{var cy=_cd.getFullYear();
+    for(var y=cy-5;y<=cy+5;y++){var e=document.createElement('div');e.className='cal-pick-item'+(y===cy?' active':'');e.textContent=y;
+      e.onclick=(function(yr2){return function(){_cd.setFullYear(yr2);_cpMode=null;p.classList.remove('show');calRender();};})(y);p.appendChild(e);}}}
+var _ce='';
+function calcDisplay(){
+  document.getElementById('calcExpr').textContent=_ce;
+  document.getElementById('calcFormula').value=_ce;
+  if(!_ce){document.getElementById('calcResult').textContent='0';return;}
+  try{var safe=_ce.replace(/[^0-9+\-*/.()%\s]/g,'');
+    var v=Function('"use strict";return ('+safe+')')();
+    document.getElementById('calcResult').textContent=isFinite(v)?(+v.toFixed(10)).toLocaleString('en-US',{maximumFractionDigits:8}):'Error';
+  }catch{document.getElementById('calcResult').textContent='\u2026';}}
+window.calcInput=function(ch){
+  if(ch==='()'){var l=_ce.trim().slice(-1),o=(_ce.match(/\(/g)||[]).length,c=(_ce.match(/\)/g)||[]).length;
+    ch=(!l||'+-*/('.includes(l))?'(':(o>c?')':'(');}
+  _ce+=ch;calcDisplay();};
+window.calcDel=function(){_ce=_ce.slice(0,-1);calcDisplay();};
+window.calcClear=function(){_ce='';calcDisplay();};
+window.calcEval=function(){try{var safe=_ce.replace(/[^0-9+\-*/.()%\s]/g,'');var v=Function('"use strict";return ('+safe+')')();if(isFinite(v))_ce=String(+v.toFixed(10));}catch{}calcDisplay();};
+window.calcFormulaInput=function(){_ce=document.getElementById('calcFormula').value;calcDisplay();};
+
+// ── Keyboard / Numpad support for calculator ───────────────────────────────
+// Fires when the calc window is open AND the user is NOT typing in a text input/textarea.
+document.addEventListener('keydown', function(e) {
+  // Only active when calc window is visible
+  var calcWin = document.getElementById('ww-calc');
+  if (!calcWin || !calcWin.classList.contains('w-visible')) return;
+  // Don't hijack typing in inputs/textareas (e.g. notepad, formula bar itself)
+  var tag = document.activeElement ? document.activeElement.tagName : '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+  var k = e.key;
+  // Digits 0-9 (main keyboard and numpad)
+  if (/^[0-9]$/.test(k))           { e.preventDefault(); calcInput(k); return; }
+  // Operators
+  if (k === '+')                    { e.preventDefault(); calcInput('+'); return; }
+  if (k === '-')                    { e.preventDefault(); calcInput('-'); return; }
+  if (k === '*' || k === 'x' || k === 'X') { e.preventDefault(); calcInput('*'); return; }
+  if (k === '/')                    { e.preventDefault(); calcInput('/'); return; }
+  if (k === '.' || k === ',')       { e.preventDefault(); calcInput('.'); return; }
+  if (k === '(' ) { e.preventDefault(); calcInput('('); return; }
+  if (k === ')' ) { e.preventDefault(); calcInput(')'); return; }
+  if (k === '%' ) { e.preventDefault(); calcInput('%'); return; }
+  // Enter / NumpadEnter = equals
+  if (k === 'Enter' || k === 'NumpadEnter') { e.preventDefault(); calcEval(); return; }
+  // Backspace = delete last char
+  if (k === 'Backspace')            { e.preventDefault(); calcDel(); return; }
+  // Escape or Delete = clear
+  if (k === 'Escape' || k === 'Delete') { e.preventDefault(); calcClear(); return; }
+  // Numpad keys (key names like 'Numpad0'..'Numpad9', 'NumpadAdd' etc.)
+  var numpadMap = {
+    'Numpad0':'0','Numpad1':'1','Numpad2':'2','Numpad3':'3','Numpad4':'4',
+    'Numpad5':'5','Numpad6':'6','Numpad7':'7','Numpad8':'8','Numpad9':'9',
+    'NumpadAdd':'+','NumpadSubtract':'-','NumpadMultiply':'*','NumpadDivide':'/',
+    'NumpadDecimal':'.','NumpadEnter':'='
+  };
+  if (numpadMap[e.code]) {
+    e.preventDefault();
+    if (numpadMap[e.code] === '=') calcEval();
+    else calcInput(numpadMap[e.code]);
+  }
+});
+var _notes=[],_nT=null;
+window._notes=_notes; // expose for inline oninput handlers
+window._noteSave=function(){noteSave();}; // proxy exposed globally
+
+// Always compute key lazily so it uses the real user id after session loads
+function _notesKey(){return 'lp_notes_v2_'+(getUser()||'default');}
+
+function notesSaveLocal(){
+  var key=_notesKey();
+  try{
+    localStorage.setItem(key,JSON.stringify(_notes));
+    console.log('[notes] saved to localStorage key:',key,'count:',_notes.length);
+  }catch(e){console.warn('[notes] localStorage save failed:',e);}
+}
+function notesLoadLocal(){
+  var key=_notesKey();
+  try{
+    var d=localStorage.getItem(key);
+    console.log('[notes] loading from localStorage key:',key,'found:',!!d);
+    if(d){var p=JSON.parse(d);if(Array.isArray(p)){_notes=p;console.log('[notes] loaded',p.length,'notes');}}
+  }catch(e){console.warn('[notes] localStorage load failed:',e);}
+}
+async function noteLoad(){
+  notesLoadLocal();
+  try{
+    var r=await fetch(API+'/api/notes/'+encodeURIComponent(getUser()));
+    if(r.ok){var d=await r.json();
+      if(Array.isArray(d)&&d.length>0&&d.length>=_notes.length){
+        console.log('[notes] server has more/equal notes, using server data');
+        _notes=d;notesSaveLocal();
+      }
+    }
+  }catch(e){console.warn('[notes] server sync skipped:',e.message);}
+}
+async function noteSaveNow(){
+  notesSaveLocal();
+  var ind=document.getElementById('noteSaveInd');
+  if(ind){ind.style.display='inline';setTimeout(function(){ind.style.display='none';},2000);}
+  try{
+    var res=await fetch(API+'/api/notes/'+encodeURIComponent(getUser()),{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_notes)});
+    if(!res.ok)console.warn('[notes] server save returned',res.status);
+    else console.log('[notes] server sync ok');
+  }catch(e){console.warn('[notes] server sync failed:',e.message);}
+}
+function noteSave(){clearTimeout(_nT);_nT=setTimeout(noteSaveNow,900);}
+function noteRender(){var list=document.getElementById('noteList');if(!list)return;list.innerHTML='';
+  _notes.forEach(function(note,i){
+    var card=document.createElement('div');
+    card.className='note-card'+(note.collapsed?' collapsed':'');
+    var safeTitle=(note.title||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    var safeBody=(note.body||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    card.innerHTML='<div class="note-card-head">'
+      +'<span class="note-collapse-icon">&#x25BE;</span>'
+      +'<input class="note-title-inp" value="'+safeTitle+'" placeholder="Title\u2026">'
+      +'<button class="note-del-btn" title="Delete">\uD83D\uDDD1</button></div>'
+      +'<textarea class="note-body-inp" placeholder="Write something\u2026">'+safeBody+'</textarea>';
+    var titleInp=card.querySelector('.note-title-inp');
+    titleInp.addEventListener('input',function(){_notes[i].title=this.value;noteSave();});
+    titleInp.addEventListener('click',function(e){e.stopPropagation();});
+    var bodyInp=card.querySelector('.note-body-inp');
+    bodyInp.addEventListener('input',function(){_notes[i].body=this.value;noteSave();});
+    var delBtn=card.querySelector('.note-del-btn');
+    delBtn.addEventListener('click',function(e){e.stopPropagation();noteDel(i);});
+    card.querySelector('.note-card-head').addEventListener('click',function(){
+      _notes[i].collapsed=!_notes[i].collapsed;
+      card.classList.toggle('collapsed',_notes[i].collapsed);
+      noteSave();
+    });
+    list.appendChild(card);});}
+window.noteAdd=function(){_notes.unshift({id:Date.now(),title:'New Note',body:'',collapsed:false});noteRender();noteSave();
+  setTimeout(function(){var t=document.querySelector('.note-title-inp');if(t){t.focus();t.select();}},50);};
+window.noteDel=function(i){if(!confirm('Delete this note?'))return;_notes.splice(i,1);noteRender();noteSave();};
+(async function(){await noteLoad();await wLoad();})();
+})();
+</script>
+
+<!-- ww-print small sliding side panel removed 2026-07 ("gusto ko naka
+     fullscreen na, di lang for images, any file type"): the printer tool no
+     longer opens as a docked 360px panel at all -- wOpen('print') (see
+     app.js-equivalent script above) now opens #imgfitModal below directly,
+     full-screen, in its empty/dropzone state. That modal also now handles
+     every file type, not just images: pictures get the crop/rotate/
+     position/size ribbon editor; PDFs get a real page-by-page preview
+     (rendered server-side); anything else (Word/Excel/etc.) gets a simple
+     confirmation screen, since there's no in-browser way to render those
+     without a heavy new conversion dependency. -->
+
+<!-- ── Print modal (fullscreen; originally an image-only "Fit to Page"
+     editor added 2026-07, redesigned same month into this Word/Docs-style
+     ribbon, then generalized to open fullscreen immediately for ANY file
+     type). Ids that are strictly about the image-editing ribbon keep the
+     imgfit- prefix from that redesign; the newer print-prefixed ids are
+     shared across all four states (empty / image / pdf / generic). ── -->
+<div id="imgfitModal" style="display:none;position:fixed;inset:0;background:#eef0f3;z-index:10650;flex-direction:column;">
+  <div style="flex-shrink:0;background:#fff;border-bottom:1px solid #ddd;padding:10px 16px;display:flex;align-items:center;gap:12px;">
+    <button onclick="printFitCancelModal()" style="background:none;border:none;font-size:13px;color:#1A2B45;cursor:pointer;font-weight:600;display:flex;align-items:center;gap:4px;padding:4px 2px;">&#x2190; Back</button>
+    <div style="font-weight:600;font-size:15px;color:#222;">Print Preview</div>
+    <div style="flex:1;"></div>
+    <span id="imgfitPageCount" style="font-size:12px;color:#666;">1 page</span>
+    <button onclick="printFitCancelModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#666;line-height:1;">&#x2715;</button>
+  </div>
+
+  <div id="imgfitCropBar" style="display:none;flex-shrink:0;background:#fff7e0;border-bottom:1px solid #f0dca0;padding:8px 16px;align-items:center;gap:10px;font-size:12px;color:#7a5c00;">
+    <span>Cropping — i-drag ang mga sulok para i-adjust ang crop area.</span>
+    <div style="flex:1;"></div>
+    <button type="button" onclick="printFitApplyCrop()" style="padding:6px 12px;border:none;border-radius:6px;background:#1A2B45;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Apply Crop</button>
+    <button type="button" onclick="printFitCancelCrop()" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#333;font-size:12px;cursor:pointer;">Cancel</button>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0;">
+    <div style="flex:1;background:#dee2e6;display:flex;align-items:center;justify-content:center;padding:32px;min-width:0;overflow:hidden;position:relative;">
+      <div id="printEmptyState" style="text-align:center;cursor:pointer;max-width:420px;"
+        onclick="document.getElementById('printFileInput').click()"
+        ondragover="event.preventDefault();this.style.opacity='0.75';"
+        ondragleave="this.style.opacity='1';"
+        ondrop="event.preventDefault();this.style.opacity='1';printHandleFile(event.dataTransfer.files[0]);">
+        <div style="background:#fff;border:2px dashed #bbb;border-radius:16px;padding:56px 40px;">
+          <div style="font-size:48px;margin-bottom:14px;">&#x1F4C4;</div>
+          <div style="font-size:16px;color:#333;">Drop any file or <strong>click to browse</strong></div>
+          <div style="font-size:13px;color:#999;margin-top:6px;">PDF, images, Word, Excel, any file type</div>
+        </div>
+      </div>
+      <div id="imgfitPreviewBox" style="display:none;position:relative;overflow:hidden;background:#fff;box-shadow:0 2px 18px rgba(0,0,0,0.35);">
+        <img id="imgfitPreviewImg" onmousedown="printFitDragStart(event)" style="position:absolute;cursor:move;">
+        <div id="imgfitCropOverlay" style="display:none;position:absolute;inset:0;"></div>
+      </div>
+      <div id="printPdfState" style="display:none;width:100%;height:100%;flex-direction:column;align-items:center;">
+        <img id="printPdfMainImg" style="flex:1;min-height:0;max-width:100%;object-fit:contain;box-shadow:0 2px 18px rgba(0,0,0,0.35);background:#fff;">
+        <div id="printPdfThumbStrip" style="display:flex;gap:6px;overflow-x:auto;margin-top:12px;max-width:100%;padding-bottom:2px;"></div>
+      </div>
+      <div id="printGenericState" style="display:none;flex-direction:column;align-items:center;justify-content:center;background:#fff;border-radius:16px;padding:48px 56px;box-shadow:0 2px 18px rgba(0,0,0,0.2);">
+        <div id="printGenericIcon" style="font-size:56px;">&#x1F4C4;</div>
+        <div id="printGenericName" style="font-weight:600;margin-top:14px;font-size:15px;color:#333;text-align:center;word-break:break-word;max-width:320px;"></div>
+        <div id="printGenericSize" style="color:#999;font-size:13px;margin-top:2px;"></div>
+        <div style="margin-top:16px;color:#999;font-size:12px;max-width:280px;text-align:center;">No preview available for this file type — printing will use your computer's default app for it.</div>
+      </div>
+    </div>
+    <div id="printSidebar" style="width:280px;flex-shrink:0;border-left:1px solid #eee;background:#fff;display:flex;flex-direction:column;overflow-y:auto;padding:18px;">
+
+      <div id="printGroupPage">
+        <div style="font-size:11px;font-weight:700;color:#1A2B45;text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px;">Document Setup</div>
+        <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Page Size</label>
+        <select id="imgfitPaperSize" onchange="printFitPaperChanged()" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:10px;">
+          <option value="A4">A4</option>
+          <option value="Letter">Letter</option>
+          <option value="Legal">Legal</option>
+          <option value="A3">A3</option>
+          <option value="A5">A5</option>
+        </select>
+        <select id="printPaperSize" style="display:none;width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:10px;">
+          <option value="A4">A4</option>
+          <option value="Letter">Letter</option>
+          <option value="Legal">Legal</option>
+          <option value="A3">A3</option>
+          <option value="A5">A5</option>
+        </select>
+        <div id="printFieldOrientation">
+          <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Orientation</label>
+          <select id="imgfitOrientation" onchange="printFitPaperChanged()" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+            <option value="portrait">Portrait</option>
+            <option value="landscape">Landscape</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="printGroupImageControls" style="display:none;">
+        <div style="height:1px;background:#eee;margin:16px 0;"></div>
+        <div style="font-size:11px;font-weight:700;color:#1A2B45;text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px;">Image Controls</div>
+        <div style="display:flex;gap:6px;margin-bottom:10px;">
+          <button type="button" id="imgfitCropBtn" onclick="printFitToggleCrop()" style="flex:1;padding:7px 6px;border:1px solid #ddd;border-radius:6px;background:#fff;font-size:12px;cursor:pointer;">&#x2702; Crop</button>
+          <button type="button" onclick="printFitRotate()" style="flex:1;padding:7px 6px;border:1px solid #ddd;border-radius:6px;background:#fff;font-size:12px;cursor:pointer;">&#x21BB; Rotate</button>
+        </div>
+        <label for="imgfitPosSelect" title="Align Image on Page" style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Align Image on Page</label>
+        <select id="imgfitPosSelect" title="Align Image on Page" onchange="printFitPosSelectChanged(this.value)" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:10px;">
+          <option value="">Choose alignment…</option>
+          <option value="0,0">Top Left</option>
+          <option value="0.5,0">Top Center</option>
+          <option value="1,0">Top Right</option>
+          <option value="0,0.5">Middle Left</option>
+          <option value="0.5,0.5">Center</option>
+          <option value="1,0.5">Middle Right</option>
+          <option value="0,1">Bottom Left</option>
+          <option value="0.5,1">Bottom Center</option>
+          <option value="1,1">Bottom Right</option>
+        </select>
+        <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Size</label>
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:10px;">
+          <label style="font-size:10px;color:#666;">W</label>
+          <input type="number" id="imgfitWidthCm" step="0.1" min="0.5" onchange="printFitSizeInputChanged('w')" style="flex:1;min-width:0;padding:5px 6px;border:1px solid #ddd;border-radius:6px;font-size:12px;">
+          <button type="button" id="imgfitLockBtn" onclick="printFitToggleLock()" title="Panatilihin ang aspect ratio" style="width:24px;height:24px;flex-shrink:0;border:1px solid #ddd;border-radius:6px;background:#eef1f6;cursor:pointer;font-size:12px;line-height:1;">&#x1F512;</button>
+          <label style="font-size:10px;color:#666;">H</label>
+          <input type="number" id="imgfitHeightCm" step="0.1" min="0.5" onchange="printFitSizeInputChanged('h')" style="flex:1;min-width:0;padding:5px 6px;border:1px solid #ddd;border-radius:6px;font-size:12px;">
+          <span style="font-size:10px;color:#999;">cm</span>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#333;cursor:pointer;">
+          <input type="checkbox" id="imgfitFitToggle" checked onchange="printFitToggleFitMode(this.checked)">
+          Fit to Page
+        </label>
+      </div>
+
+      <div style="height:1px;background:#eee;margin:16px 0;"></div>
+      <div style="font-size:11px;font-weight:700;color:#1A2B45;text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px;">Print Settings</div>
+      <div id="printFieldMargin" style="margin-bottom:10px;">
+        <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Margins</label>
+        <select id="imgfitMargin" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+          <option value="normal">Normal</option>
+          <option value="none">None (edge to edge)</option>
+          <option value="wide">Wide</option>
+        </select>
+      </div>
+
+      <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Copies</label>
+      <input type="number" id="imgfitCopies" value="1" min="1" max="99" style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:10px;">
+      <input type="number" id="printCopies" value="1" min="1" max="99" style="display:none;width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;margin-bottom:10px;">
+
+      <div id="printFieldPages" style="display:none;margin-bottom:10px;">
+        <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">Pages (leave blank for all)</label>
+        <input type="text" id="printPages" placeholder="e.g. 1-3,5"
+          style="width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+      </div>
+
+      <div id="printFieldThumbs">
+        <div id="imgfitThumbStrip" style="display:flex;gap:6px;margin-bottom:8px;overflow-x:auto;padding-bottom:2px;"></div>
+        <button type="button" onclick="printFitAddPicture()" style="width:100%;padding:8px 4px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:12px;cursor:pointer;">+ Add Page</button>
+      </div>
+
+      <div style="flex:1;"></div>
+      <div id="imgfitModalStatus" style="display:none;margin-top:12px;padding:8px 10px;border-radius:6px;font-size:12px;font-weight:600;"></div>
+    </div>
+  </div>
+
+  <div style="flex-shrink:0;border-top:1px solid #eee;background:#fff;padding:12px 16px;display:flex;gap:8px;justify-content:flex-end;">
+    <button onclick="printFitCancelModal()" style="padding:10px 18px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#333;font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>
+    <button id="imgfitSendBtn" onclick="printSendDispatch()" style="display:none;padding:10px 18px;border:none;border-radius:8px;background:#1A2B45;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Send to Printer</button>
+  </div>
+</div>
+<input type="file" id="printFileInput" style="display:none;" onchange="printHandleFile(this.files[0])">
+<input type="file" id="imgfitAddInput" accept="image/png,image/jpeg,image/jpg,image/gif,image/bmp,image/webp" multiple style="display:none;" onchange="printFitHandleAddFiles(this.files)">
+
+<script>
+var _printFile=null;
+var IMGFIT_EXTS=["jpg","jpeg","png","gif","bmp","webp"];
+var _printIsImage=false;
+var _printIsPdf=false;
+var _printState='empty'; // 'empty' | 'image' | 'pdf' | 'generic'
+var _printPdfImages=[];
+var _printPdfActive=0;
+var _printFitPages=[]; // {dataUrl,w,h,xMm,yMm,widthMm,heightMm}
+var _printFitActive=0;
+var PAPER_MM={A4:[210,297],Letter:[215.9,279.4],Legal:[215.9,355.6],A3:[297,420],A5:[148,210]};
+var MARGIN_MM={none:0,normal:8,wide:19};
+var _lockAspect=true;
+var _cropMode=false;
+var _cropRect=null; // {x,y,w,h} in natural image px
+var _pxPerMm=1;
+var _drag=null;
+// Opens the print tool full-screen straight to its empty/dropzone state --
+// called by wOpen('print') instead of the old sliding side panel.
+function printOpenEmpty(){
+  document.getElementById("imgfitModal").style.display="flex";
+  printSetState('empty');
+}
+// Switches which of the four states (empty / image / pdf / generic) is
+// visible, toggling both the main stage content and which ribbon/sidebar
+// fields are relevant for that file type (e.g. crop/rotate/position/size
+// only ever make sense for a picture).
+function printSetState(state){
+  _printState=state;
+  var isImg=state==='image', isPdf=state==='pdf', isGen=state==='generic', isEmpty=state==='empty';
+  document.getElementById("printEmptyState").style.display=isEmpty?"block":"none";
+  document.getElementById("imgfitPreviewBox").style.display=isImg?"block":"none";
+  document.getElementById("printPdfState").style.display=isPdf?"flex":"none";
+  document.getElementById("printGenericState").style.display=isGen?"flex":"none";
+
+  document.getElementById("printGroupPage").style.display=isEmpty?"none":"block";
+  document.getElementById("printGroupImageControls").style.display=isImg?"block":"none";
+  document.getElementById("printFieldOrientation").style.display=isImg?"block":"none";
+
+  document.getElementById("imgfitPaperSize").style.display=isImg?"block":"none";
+  document.getElementById("printPaperSize").style.display=(isPdf||isGen)?"block":"none";
+
+  document.getElementById("printFieldMargin").style.display=isImg?"block":"none";
+  document.getElementById("imgfitCopies").style.display=isImg?"block":"none";
+  document.getElementById("printCopies").style.display=(isPdf||isGen)?"block":"none";
+  document.getElementById("printFieldPages").style.display=isPdf?"block":"none";
+  document.getElementById("printFieldThumbs").style.display=isImg?"block":"none";
+
+  document.getElementById("imgfitSendBtn").style.display=isEmpty?"none":"inline-block";
+  document.getElementById("imgfitPageCount").style.display=(isImg||isPdf)?"inline":"none";
+}
+function printHandleFile(file){
+  if(!file)return;
+  _printFile=file;
+  var ext=file.name.split(".").pop().toLowerCase();
+  _printIsImage=IMGFIT_EXTS.indexOf(ext)!==-1;
+  _printIsPdf=(ext==="pdf");
+  printFitModalStatus("");
+  if(_printIsImage){
+    _printFitPages=[];
+    printFitLoadFile(file,true);
+  }else if(_printIsPdf){
+    printSetState('pdf');
+    printLoadPdfPreview(file);
+  }else{
+    printSetState('generic');
+    printShowGenericFile(file,ext);
+  }
+}
+function printShowGenericFile(file,ext){
+  var icons={pdf:"&#x1F4D5;",jpg:"&#x1F5BC;",jpeg:"&#x1F5BC;",png:"&#x1F5BC;",gif:"&#x1F5BC;",doc:"&#x1F4DD;",docx:"&#x1F4DD;",xls:"&#x1F4CA;",xlsx:"&#x1F4CA;",ppt:"&#x1F4F0;",pptx:"&#x1F4F0;"};
+  document.getElementById("printGenericIcon").innerHTML=icons[ext]||"&#x1F4C4;";
+  document.getElementById("printGenericName").textContent=file.name;
+  document.getElementById("printGenericSize").textContent=(file.size/1024).toFixed(1)+" KB";
+}
+// PDFs get a real page-by-page preview: the file is base64-read client-side
+// and sent to a server route that rasterizes each page with mupdf (the same
+// pipeline already used elsewhere in this app). If that fails for any
+// reason (corrupt/odd PDF), fall back to the generic confirmation screen
+// rather than blocking the user from printing at all.
+function printLoadPdfPreview(file){
+  document.getElementById("imgfitPageCount").style.display="inline";
+  document.getElementById("imgfitPageCount").textContent="Loading preview…";
+  var reader=new FileReader();
+  reader.onload=async function(e){
+    try{
+      var API=window.location.origin;
+      var r=await fetch(API+"/api/print-preview-pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pdfBase64:e.target.result})});
+      var d=await r.json();
+      if(!r.ok||!d.ok||!d.images||!d.images.length) throw new Error((d&&d.error)||"Preview failed");
+      _printPdfImages=d.images;
+      _printPdfActive=0;
+      printRenderPdfPreview();
+    }catch(err){
+      printSetState('generic');
+      printShowGenericFile(file,'pdf');
+    }
+  };
+  reader.onerror=function(){ printSetState('generic'); printShowGenericFile(file,'pdf'); };
+  reader.readAsDataURL(file);
+}
+function printRenderPdfPreview(){
+  var main=document.getElementById("printPdfMainImg");
+  main.src=_printPdfImages[_printPdfActive];
+  var strip=document.getElementById("printPdfThumbStrip");
+  strip.innerHTML="";
+  document.getElementById("imgfitPageCount").style.display="inline";
+  document.getElementById("imgfitPageCount").textContent=_printPdfImages.length+(_printPdfImages.length===1?" page":" pages");
+  _printPdfImages.forEach(function(src,i){
+    var im=document.createElement("img");
+    im.src=src;
+    im.style.cssText="width:44px;height:56px;object-fit:cover;border-radius:4px;cursor:pointer;border:2px solid "+(i===_printPdfActive?"#1A2B45":"transparent")+";flex-shrink:0;";
+    im.onclick=function(){ _printPdfActive=i; printRenderPdfPreview(); };
+    strip.appendChild(im);
+  });
+}
+function printClearFile(){
+  _printFile=null;
+  _printIsImage=false;
+  _printIsPdf=false;
+  _printFitPages=[];
+  _printFitActive=0;
+  _printPdfImages=[];
+  _printPdfActive=0;
+  _cropMode=false;
+  _drag=null;
+  document.getElementById("imgfitThumbStrip").innerHTML="";
+  document.getElementById("printPdfThumbStrip").innerHTML="";
+  var cropBar=document.getElementById("imgfitCropBar"); if(cropBar) cropBar.style.display="none";
+  var ov=document.getElementById("imgfitCropOverlay"); if(ov){ ov.style.display="none"; ov.innerHTML=""; }
+  document.getElementById("printFileInput").value="";
+  document.getElementById("printPages").value="";
+  printSetState('empty');
+  printFitModalStatus("");
+}
+function printSendDispatch(){
+  if(_printIsImage) printFitSend();
+  else printSend();
+}
+async function printSend(){
+  if(!_printFile)return;
+  var btn=document.getElementById("imgfitSendBtn");
+  btn.disabled=true;btn.style.opacity=".6";
+  btn.textContent="Sending...";
+  printFitModalStatus("Uploading to server...","info");
+  var copies=parseInt(document.getElementById("printCopies").value)||1;
+  var paper=document.getElementById("printPaperSize").value;
+  var pages=(document.getElementById("printPages").value||"").trim();
+  var API=window.location.origin;
+  try{
+    var r=await fetch(API+"/api/print-upload",{
+      method:"POST",
+      headers:{"Content-Type":_printFile.type||"application/octet-stream","X-File-Type":_printFile.type||"application/octet-stream","X-File-Name":encodeURIComponent(_printFile.name),"X-Copies":String(copies),"X-Paper-Size":paper,"X-Pages":pages},
+      body:_printFile,
+    });
+    var d=await r.json();
+    if(r.ok&&d.ok){
+      printFitModalStatus(d.message||"Sent to printer!","ok");
+      setTimeout(function(){ printFitCancelModal(); },1400);
+    }else{throw new Error(d.error||"Print failed");}
+  }catch(e){
+    printFitModalStatus("Error: "+e.message,"err");
+    btn.disabled=false;btn.style.opacity="1";
+    btn.textContent="Send to Printer";
+  }
+}
+
+// ── Fit-to-Page helpers ───────────────────────────────────────────────────
+function printFitPageMm(){
+  var paper=document.getElementById("imgfitPaperSize").value;
+  var d=PAPER_MM[paper]||PAPER_MM.A4;
+  var landscape=document.getElementById("imgfitOrientation").value==="landscape";
+  return landscape ? [d[1],d[0]] : [d[0],d[1]];
+}
+function printFitClampPosition(p){
+  var pm=printFitPageMm(), pw=pm[0], ph=pm[1];
+  var maxX=Math.max(0,pw-p.widthMm), maxY=Math.max(0,ph-p.heightMm);
+  p.xMm=Math.min(Math.max(0,p.xMm),maxX);
+  p.yMm=Math.min(Math.max(0,p.yMm),maxY);
+}
+function printFitAutoPlace(p){
+  if(!p)return;
+  var pm=printFitPageMm(), pw=pm[0], ph=pm[1];
+  var inset=MARGIN_MM[document.getElementById("imgfitMargin").value]||0;
+  var areaW=Math.max(10,pw-inset*2), areaH=Math.max(10,ph-inset*2);
+  var aspect=(p.w&&p.h)?(p.w/p.h):1;
+  var widthMm,heightMm;
+  if(areaW/areaH>aspect){ heightMm=areaH; widthMm=areaH*aspect; }else{ widthMm=areaW; heightMm=areaW/aspect; }
+  p.widthMm=widthMm; p.heightMm=heightMm;
+  p.xMm=inset+(areaW-widthMm)/2;
+  p.yMm=inset+(areaH-heightMm)/2;
+}
+function printFitAutoPlaceActive(){
+  var p=_printFitPages[_printFitActive];
+  if(!p)return;
+  printFitAutoPlace(p);
+  printFitSyncSizeInputs();
+  printFitRefreshPreview();
+}
+function printFitPaperChanged(){
+  _printFitPages.forEach(function(p){ printFitClampPosition(p); });
+  printFitRefreshPreview();
+}
+function printFitSetPosition(ax,ay){
+  var p=_printFitPages[_printFitActive]; if(!p)return;
+  var pm=printFitPageMm(), pw=pm[0], ph=pm[1];
+  p.xMm=ax*(pw-p.widthMm);
+  p.yMm=ay*(ph-p.heightMm);
+  printFitClampPosition(p);
+  printFitRefreshPreview();
+}
+function printFitPosSelectChanged(val){
+  if(!val)return;
+  var parts=val.split(",");
+  printFitSetPosition(parseFloat(parts[0]),parseFloat(parts[1]));
+  document.getElementById("imgfitPosSelect").value="";
+}
+function printFitSyncFitToggle(){
+  var on=document.getElementById("imgfitFitToggle").checked;
+  document.getElementById("imgfitWidthCm").disabled=on;
+  document.getElementById("imgfitHeightCm").disabled=on;
+}
+function printFitToggleFitMode(checked){
+  printFitSyncFitToggle();
+  if(checked) printFitAutoPlaceActive();
+}
+function printFitToggleLock(){
+  _lockAspect=!_lockAspect;
+  var btn=document.getElementById("imgfitLockBtn");
+  btn.style.background=_lockAspect?"#eef1f6":"#fff";
+  btn.innerHTML=_lockAspect?"&#x1F512;":"&#x1F513;";
+}
+function printFitSyncSizeInputs(){
+  var p=_printFitPages[_printFitActive];
+  document.getElementById("imgfitWidthCm").value=p?(p.widthMm/10).toFixed(1):"";
+  document.getElementById("imgfitHeightCm").value=p?(p.heightMm/10).toFixed(1):"";
+}
+function printFitSizeInputChanged(which){
+  var p=_printFitPages[_printFitActive]; if(!p)return;
+  var aspect=(p.w&&p.h)?(p.w/p.h):(p.widthMm/p.heightMm);
+  if(which==="w"){
+    var wMm=Math.max(5,(parseFloat(document.getElementById("imgfitWidthCm").value)||0)*10);
+    p.widthMm=wMm;
+    if(_lockAspect)p.heightMm=wMm/aspect;
+  }else{
+    var hMm=Math.max(5,(parseFloat(document.getElementById("imgfitHeightCm").value)||0)*10);
+    p.heightMm=hMm;
+    if(_lockAspect)p.widthMm=hMm*aspect;
+  }
+  printFitClampPosition(p);
+  printFitSyncSizeInputs();
+  printFitRefreshPreview();
+}
+function printFitLoadFile(file,replaceAll){
+  printSetState('image');
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var img=new Image();
+    img.onload=function(){
+      var page={dataUrl:e.target.result,w:img.naturalWidth,h:img.naturalHeight,xMm:0,yMm:0,widthMm:100,heightMm:100};
+      if(replaceAll)_printFitPages=[page];else _printFitPages.push(page);
+      _printFitActive=_printFitPages.length-1;
+      if(_printFitPages.length===1){
+        document.getElementById("imgfitOrientation").value=(img.naturalWidth>img.naturalHeight)?"landscape":"portrait";
+      }
+      printFitAutoPlace(page);
+      printFitRenderThumbs();
+      printFitOpenModal();
+    };
+    img.onerror=function(){ printFitModalStatus("Couldn't read that picture.","err"); };
+    img.src=e.target.result;
+  };
+  reader.onerror=function(){ printFitModalStatus("Couldn't read that file.","err"); };
+  reader.readAsDataURL(file);
+}
+function printFitAddPicture(){ document.getElementById("imgfitAddInput").click(); }
+function printFitHandleAddFiles(fileList){
+  Array.prototype.forEach.call(fileList,function(f){ printFitLoadFile(f,false); });
+  document.getElementById("imgfitAddInput").value="";
+}
+function printFitRenderThumbs(){
+  var strip=document.getElementById("imgfitThumbStrip");
+  strip.innerHTML="";
+  var cnt=document.getElementById("imgfitPageCount");
+  if(cnt) cnt.textContent=_printFitPages.length+(_printFitPages.length===1?" page":" pages");
+  _printFitPages.forEach(function(p,i){
+    var wrap=document.createElement("div");
+    wrap.style.cssText="position:relative;flex-shrink:0;";
+    var im=document.createElement("img");
+    im.src=p.dataUrl;
+    im.style.cssText="width:44px;height:44px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid "+(i===_printFitActive?"#1A2B45":"transparent")+";";
+    im.onclick=function(){ _printFitActive=i; printFitRenderThumbs(); printFitSyncSizeInputs(); printFitRefreshPreview(); };
+    wrap.appendChild(im);
+    if(_printFitPages.length>1){
+      var x=document.createElement("button");
+      x.innerHTML="&#x2715;";
+      x.style.cssText="position:absolute;top:-6px;right:-6px;width:16px;height:16px;border-radius:50%;background:#d32f2f;color:#fff;border:none;font-size:9px;line-height:1;cursor:pointer;";
+      x.onclick=function(ev){ ev.stopPropagation(); printFitRemovePage(i); };
+      wrap.appendChild(x);
+    }
+    strip.appendChild(wrap);
+  });
+}
+function printFitRemovePage(i){
+  _printFitPages.splice(i,1);
+  if(!_printFitPages.length){ printClearFile(); return; }
+  _printFitActive=Math.min(_printFitActive,_printFitPages.length-1);
+  printFitRenderThumbs();
+  printFitSyncSizeInputs();
+  printFitRefreshPreview();
+}
+function printFitRotate(){
+  var p=_printFitPages[_printFitActive];
+  if(!p)return;
+  var canvas=document.createElement("canvas");
+  canvas.width=p.h;canvas.height=p.w;
+  var ctx=canvas.getContext("2d");
+  ctx.translate(canvas.width/2,canvas.height/2);
+  ctx.rotate(Math.PI/2);
+  var img=new Image();
+  img.onload=function(){
+    ctx.drawImage(img,-p.w/2,-p.h/2,p.w,p.h);
+    var nw=p.h,nh=p.w;
+    p.dataUrl=canvas.toDataURL("image/jpeg",0.92);
+    p.w=nw;p.h=nh;
+    var oldW=p.widthMm,oldH=p.heightMm;
+    p.widthMm=oldH;p.heightMm=oldW;
+    printFitClampPosition(p);
+    printFitRenderThumbs();
+    printFitSyncSizeInputs();
+    printFitRefreshPreview();
+  };
+  img.src=p.dataUrl;
+}
+function printFitCropImgBox(){
+  var box=document.getElementById("imgfitPreviewBox");
+  var p=_printFitPages[_printFitActive];
+  var cw=box.clientWidth, ch=box.clientHeight;
+  var s=Math.min(cw/p.w, ch/p.h);
+  var w=p.w*s, h=p.h*s;
+  return {left:(cw-w)/2, top:(ch-h)/2, w:w, h:h, scale:s};
+}
+function printFitClearCropUI(){
+  var ov=document.getElementById("imgfitCropOverlay");
+  if(ov){ ov.style.display="none"; ov.innerHTML=""; }
+}
+function printFitRenderCropUI(){
+  var p=_printFitPages[_printFitActive]; if(!p)return;
+  var img=document.getElementById("imgfitPreviewImg");
+  var ib=printFitCropImgBox();
+  img.style.left=ib.left+"px"; img.style.top=ib.top+"px";
+  img.style.width=ib.w+"px"; img.style.height=ib.h+"px";
+  var ov=document.getElementById("imgfitCropOverlay");
+  ov.style.display="block";
+  ov.innerHTML="";
+  var cr=_cropRect;
+  var rectLeft=ib.left+cr.x*ib.scale, rectTop=ib.top+cr.y*ib.scale, rectW=cr.w*ib.scale, rectH=cr.h*ib.scale;
+  var sel=document.createElement("div");
+  sel.style.cssText="position:absolute;left:"+rectLeft+"px;top:"+rectTop+"px;width:"+rectW+"px;height:"+rectH+"px;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.55);cursor:move;";
+  sel.onmousedown=function(e){ e.preventDefault(); e.stopPropagation(); _drag={type:"crop-move",startX:e.clientX,startY:e.clientY,startRect:{x:cr.x,y:cr.y,w:cr.w,h:cr.h},scale:ib.scale}; };
+  ov.appendChild(sel);
+  [["tl",0,0],["tr",1,0],["bl",0,1],["br",1,1]].forEach(function(c){
+    var hd=document.createElement("div");
+    var hx=rectLeft+c[1]*rectW, hy=rectTop+c[2]*rectH;
+    hd.style.cssText="position:absolute;left:"+(hx-6)+"px;top:"+(hy-6)+"px;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #1A2B45;cursor:"+((c[0]==="tl"||c[0]==="br")?"nwse-resize":"nesw-resize")+";";
+    hd.onmousedown=function(e){ e.preventDefault(); e.stopPropagation(); _drag={type:"crop-"+c[0],startX:e.clientX,startY:e.clientY,startRect:{x:cr.x,y:cr.y,w:cr.w,h:cr.h},scale:ib.scale}; };
+    ov.appendChild(hd);
+  });
+}
+function printFitToggleCrop(){
+  var p=_printFitPages[_printFitActive]; if(!p)return;
+  _cropMode=true;
+  _cropRect={x:0,y:0,w:p.w,h:p.h};
+  document.getElementById("imgfitCropBar").style.display="flex";
+  printFitRefreshPreview();
+}
+function printFitCancelCrop(){
+  _cropMode=false;
+  document.getElementById("imgfitCropBar").style.display="none";
+  printFitRefreshPreview();
+}
+function printFitApplyCrop(){
+  var p=_printFitPages[_printFitActive]; if(!p||!_cropRect)return;
+  var cr=_cropRect;
+  var canvas=document.createElement("canvas");
+  canvas.width=Math.max(1,Math.round(cr.w));
+  canvas.height=Math.max(1,Math.round(cr.h));
+  var ctx=canvas.getContext("2d");
+  var img=new Image();
+  img.onload=function(){
+    ctx.drawImage(img,cr.x,cr.y,cr.w,cr.h,0,0,canvas.width,canvas.height);
+    var newAspect=canvas.width/canvas.height;
+    p.dataUrl=canvas.toDataURL("image/jpeg",0.92);
+    p.w=canvas.width;p.h=canvas.height;
+    p.heightMm=p.widthMm/newAspect;
+    printFitClampPosition(p);
+    _cropMode=false;
+    document.getElementById("imgfitCropBar").style.display="none";
+    printFitRenderThumbs();
+    printFitSyncSizeInputs();
+    printFitRefreshPreview();
+  };
+  img.src=p.dataUrl;
+}
+function printFitDragStart(e){
+  if(_cropMode)return;
+  var p=_printFitPages[_printFitActive]; if(!p)return;
+  e.preventDefault();
+  _drag={type:"image",startX:e.clientX,startY:e.clientY,startXmm:p.xMm,startYmm:p.yMm};
+}
+document.addEventListener("mousemove",function(e){
+  if(!_drag)return;
+  var p=_printFitPages[_printFitActive]; if(!p)return;
+  if(_drag.type==="image"){
+    var dxMm=(e.clientX-_drag.startX)/_pxPerMm, dyMm=(e.clientY-_drag.startY)/_pxPerMm;
+    p.xMm=_drag.startXmm+dxMm; p.yMm=_drag.startYmm+dyMm;
+    printFitClampPosition(p);
+    printFitRefreshPreview();
+    return;
+  }
+  if(_drag.type.indexOf("crop-")===0){
+    var scale=_drag.scale;
+    var dx=(e.clientX-_drag.startX)/scale, dy=(e.clientY-_drag.startY)/scale;
+    var sr=_drag.startRect, kind=_drag.type.slice(5);
+    var nx=sr.x, ny=sr.y, nw=sr.w, nh=sr.h, minSize=20;
+    if(kind==="move"){ nx=sr.x+dx; ny=sr.y+dy; }
+    else if(kind==="tl"){ nx=sr.x+dx; ny=sr.y+dy; nw=sr.w-dx; nh=sr.h-dy; }
+    else if(kind==="tr"){ ny=sr.y+dy; nw=sr.w+dx; nh=sr.h-dy; }
+    else if(kind==="bl"){ nx=sr.x+dx; nw=sr.w-dx; nh=sr.h+dy; }
+    else if(kind==="br"){ nw=sr.w+dx; nh=sr.h+dy; }
+    nw=Math.max(minSize,nw); nh=Math.max(minSize,nh);
+    nx=Math.max(0,Math.min(nx,p.w-nw));
+    ny=Math.max(0,Math.min(ny,p.h-nh));
+    nw=Math.min(nw,p.w-nx); nh=Math.min(nh,p.h-ny);
+    _cropRect={x:nx,y:ny,w:nw,h:nh};
+    printFitRefreshPreview();
+  }
+});
+document.addEventListener("mouseup",function(){ _drag=null; });
+window.addEventListener("resize",function(){
+  var m=document.getElementById("imgfitModal");
+  if(m&&m.style.display==="flex") printFitRefreshPreview();
+});
+function printFitRefreshPreview(){
+  var p=_printFitPages[_printFitActive];
+  var img=document.getElementById("imgfitPreviewImg");
+  var box=document.getElementById("imgfitPreviewBox");
+  var stage=box.parentElement;
+  var pm=printFitPageMm(), pw=pm[0], ph=pm[1];
+  var r=pw/ph;
+  var availW=Math.max(60,(stage.clientWidth||300)-64);
+  var availH=Math.max(60,(stage.clientHeight||400)-64);
+  var bw,bh;
+  if(availW/availH>r){ bh=availH; bw=bh*r; }else{ bw=availW; bh=bw/r; }
+  box.style.width=bw+"px";
+  box.style.height=bh+"px";
+  _pxPerMm=bw/pw;
+  if(!p){ img.src=""; img.style.width="0"; img.style.height="0"; printFitClearCropUI(); return; }
+  img.src=p.dataUrl;
+  if(_cropMode){
+    printFitRenderCropUI();
+  }else{
+    printFitClearCropUI();
+    var cw=p.widthMm*_pxPerMm, ch=p.heightMm*_pxPerMm;
+    img.style.width=cw+"px";
+    img.style.height=ch+"px";
+    img.style.left=(p.xMm*_pxPerMm)+"px";
+    img.style.top=(p.yMm*_pxPerMm)+"px";
+  }
+}
+function printFitBuildPayload(){
+  var landscape=document.getElementById("imgfitOrientation").value==="landscape";
+  var margin=document.getElementById("imgfitMargin").value;
+  var paperSize=document.getElementById("imgfitPaperSize").value;
+  var copies=parseInt(document.getElementById("imgfitCopies").value)||1;
+  var pages=_printFitPages.map(function(p){ return {dataUrl:p.dataUrl,xMm:p.xMm,yMm:p.yMm,widthMm:p.widthMm,heightMm:p.heightMm}; });
+  return {pages:pages,paperSize:paperSize,landscape:landscape,margin:margin,copies:copies};
+}
+function printFitOpenModal(){
+  document.getElementById("imgfitModal").style.display="flex";
+  printFitSyncFitToggle();
+  printFitSyncSizeInputs();
+  printFitRefreshPreview();
+}
+function printFitCancelModal(){
+  var btn=document.getElementById("imgfitSendBtn");
+  btn.disabled=false;btn.style.opacity="1";btn.textContent="Send to Printer";
+  printFitModalStatus("");
+  _cropMode=false;
+  var cropBar=document.getElementById("imgfitCropBar"); if(cropBar) cropBar.style.display="none";
+  printClearFile();
+  document.getElementById("imgfitModal").style.display="none";
+}
+function printFitModalStatus(msg,type){
+  var el=document.getElementById("imgfitModalStatus");
+  if(!msg){el.style.display="none";return;}
+  el.style.display="block";
+  el.style.background=type==="ok"?"#d5f5e3":type==="err"?"#fdecea":"#e8eef5";
+  el.style.color=type==="ok"?"#1e8449":type==="err"?"#b71c1c":"#1A2B45";
+  el.textContent=msg;
+}
+async function printFitSend(){
+  if(!_printFitPages.length)return;
+  var btn=document.getElementById("imgfitSendBtn");
+  btn.disabled=true;btn.style.opacity=".6";
+  btn.textContent="Sending...";
+  printFitModalStatus("Composing and sending to printer...","info");
+  var API=window.location.origin;
+  try{
+    var r=await fetch(API+"/api/print-fit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(printFitBuildPayload())});
+    var d=await r.json();
+    if(r.ok&&d.ok){
+      printFitModalStatus(d.message||"Sent to printer!","ok");
+      setTimeout(function(){ printFitCancelModal(); },1400);
+    }else{throw new Error(d.error||"Print failed");}
+  }catch(e){
+    printFitModalStatus("Error: "+e.message,"err");
+    btn.disabled=false;btn.style.opacity="1";
+    btn.textContent="Send to Printer";
+  }
+}
+document.addEventListener("keydown",function(e){
+  if(e.key==="Escape"){
+    var m=document.getElementById("imgfitModal");
+    if(m&&m.style.display==="flex"){
+      if(_cropMode) printFitCancelCrop();
+      else printFitCancelModal();
+    }
+  }
+});
+</script>
+
+
+<!-- ═══════════════════════════════════════════════════════════
+     CHAT WIDGET
+════════════════════════════════════════════════════════════ -->
+<style>
+.chat-messages {
+    flex:1; overflow-y:auto; padding:10px 12px;
+    display:flex; flex-direction:column; gap:8px;
+    overscroll-behavior:contain;
+}
+.chat-msg { display:flex; flex-direction:column; max-width:80%; }
+.chat-msg.me { align-self:flex-end; align-items:flex-end; }
+.chat-msg.them { align-self:flex-start; align-items:flex-start; }
+.chat-bubble {
+    padding:7px 12px; border-radius:14px; font-size:13px;
+    line-height:1.4; word-break:break-word; max-width:100%;
+}
+.chat-msg.me   .chat-bubble { background:#1A2B45; color:#fff; border-bottom-right-radius:4px; }
+.chat-msg.them .chat-bubble { background:#f0f2f5; color:#222; border-bottom-left-radius:4px; }
+.chat-meta { font-size:10px; color:#aaa; margin-top:2px; padding:0 4px; }
+.chat-input-row {
+    display:flex; gap:8px; padding:10px 12px;
+    border-top:1px solid var(--border,#eee); flex-shrink:0;
+}
+.chat-input {
+    flex:1; border:1px solid var(--border,#ddd); border-radius:20px;
+    padding:7px 14px; font-size:13px; outline:none;
+    background:var(--surface-2,#fff); color:var(--text-primary,#000);
+    resize:none; max-height:80px; overflow-y:auto; line-height:1.4;
+}
+.chat-input:focus { border-color:#1A2B45; }
+.chat-send-btn {
+    background:#1A2B45; color:#fff; border:none;
+    border-radius:50%; width:36px; height:36px;
+    cursor:pointer; font-size:18px; display:flex;
+    align-items:center; justify-content:center;
+    flex-shrink:0; align-self:flex-end;
+    transition:background .15s;
+}
+.chat-send-btn:hover { background:#243d5e; }
+.chat-date-divider {
+    text-align:center; font-size:10px; color:#bbb;
+    margin:4px 0; position:relative;
+}
+.chat-date-divider::before,.chat-date-divider::after {
+    content:''; position:absolute; top:50%;
+    width:35%; height:1px; background:#eee;
+}
+.chat-date-divider::before { left:0; }
+.chat-date-divider::after  { right:0; }
+.chat-online { font-size:11px; color:#1b5e20; padding:4px 12px 0; flex-shrink:0; }
+</style>
+
+<div class="w-window" id="ww-chat">
+  <div class="w-titlebar">
+    <span class="w-titlebar-icon">💬</span>
+    <span class="w-titlebar-title">Team Chat</span>
+    <span id="chatOnline" style="font-size:11px;opacity:.7;margin-right:auto;margin-left:6px;"></span>
+    <button class="w-btn-min" onclick="chatClose()">−</button>
+  </div>
+  <div class="chat-messages" id="chatMessages"></div>
+  <div class="chat-input-row">
+    <textarea class="chat-input" id="chatInput" placeholder="Type a message…" rows="1"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();chatSend();}
+                 this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px';"
+      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px';"></textarea>
+    <button class="chat-send-btn" onclick="chatSend()" title="Send">➤</button>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+const API = window.location.origin;
+function getChatUser() {
+    try { const s=sessionStorage.getItem('lp_session'); if(!s)return{name:'Unknown',id:'?'};
+          const p=JSON.parse(s); return {name:p.name||'Unknown',id:p.id||'?'}; }
+    catch { return {name:'Unknown',id:'?'}; }
+}
+
+let _chatMessages   = [];
+let _chatUnread     = 0;
+let _chatSSE        = null;
+let _chatLastDate   = null;
+let _chatOpen       = false;
+
+// ── Persistent last-read timestamp ───────────────────────────────────────
+function _chatReadKey() {
+    try { return 'lp_chat_lastread_' + getChatUser().id; } catch { return 'lp_chat_lastread'; }
+}
+function _chatGetLastRead() {
+    try { return parseFloat(localStorage.getItem(_chatReadKey())) || 0; } catch { return 0; }
+}
+function _chatSetLastRead(ts) {
+    try { localStorage.setItem(_chatReadKey(), String(ts)); } catch {}
+}
+
+// ── Format helpers ────────────────────────────────────────────────────────
+function fmtTime(ts) {
+    const d = new Date(ts);
+    return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+}
+function fmtDate(ts) {
+    const d = new Date(ts), now = new Date();
+    if (d.toDateString()===now.toDateString()) return 'Today';
+    const y = new Date(now); y.setDate(y.getDate()-1);
+    if (d.toDateString()===y.toDateString()) return 'Yesterday';
+    return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+
+// ── Render one message ────────────────────────────────────────────────────
+function chatRenderMsg(msg, container) {
+    const me = getChatUser();
+    const isMe = msg.senderId === me.id || msg.sender === me.name;
+
+    // Date divider
+    const msgDate = new Date(msg.ts).toDateString();
+    if (msgDate !== _chatLastDate) {
+        _chatLastDate = msgDate;
+        const div = document.createElement('div');
+        div.className = 'chat-date-divider';
+        div.textContent = fmtDate(msg.ts);
+        container.appendChild(div);
+    }
+
+    const wrap = document.createElement('div');
+    wrap.className = 'chat-msg ' + (isMe ? 'me' : 'them');
+    wrap.innerHTML =
+        '<div class="chat-meta" style="font-weight:600;color:' + (isMe ? '#1A2B45' : '#555') + ';">' + escHtml(msg.sender) + '</div>' +
+        '<div class="chat-bubble">' + escHtml(msg.text).replace(/\n/g,'<br>') + '</div>' +
+        '<div class="chat-meta">' + fmtTime(msg.ts) + '</div>';
+    container.appendChild(wrap);
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Load history ──────────────────────────────────────────────────────────
+async function chatLoadHistory() {
+    try {
+        const r = await fetch(API + '/api/chat/history');
+        const msgs = await r.json();
+        _chatMessages = msgs;
+        const container = document.getElementById('chatMessages');
+        container.innerHTML = '';
+        _chatLastDate = null;
+        msgs.forEach(m => chatRenderMsg(m, container));
+        chatScrollBottom();
+    } catch(e) { console.warn('[chat] history load failed:', e.message); }
+}
+
+// ── Compute initial unread count from history on page load ────────────────
+async function chatInitUnread() {
+    try {
+        const r = await fetch(API + '/api/chat/history');
+        if (!r.ok) return;
+        const msgs = await r.json();
+        // Populate _chatMessages here too (not just inside chatLoadHistory) —
+        // otherwise chatPoll()'s "lastKnown" stays 0 until the user actually
+        // opens the chat panel, and every 3-second poll in the meantime
+        // re-treats the ENTIRE history as brand-new, re-dinging for already
+        // read messages on every page load.
+        _chatMessages = msgs;
+        const lastRead = _chatGetLastRead();
+        const me = getChatUser();
+        // Count messages newer than lastRead that weren't sent by me
+        _chatUnread = msgs.filter(m => m.ts > lastRead && m.senderId !== me.id && m.sender !== me.name).length;
+        chatUpdateBadge();
+    } catch {}
+}
+
+// ── SSE connection ────────────────────────────────────────────────────────
+let _chatLastMsgId  = null;
+let _chatPollTimer  = null;
+
+function chatReceiveMsg(msg) {
+    // Deduplicate by id
+    if (_chatMessages.find(m => m.id === msg.id)) return;
+    _chatMessages.push(msg);
+    _chatLastMsgId = msg.id;
+    const container = document.getElementById('chatMessages');
+    if (container) {
+        chatRenderMsg(msg, container);
+        chatScrollBottom();
+    }
+    let isUnread = false;
+    if (!_chatOpen) {
+        const lastRead = _chatGetLastRead();
+        if (msg.ts > lastRead) { _chatUnread++; chatUpdateBadge(); isUnread = true; }
+    }
+    // Only ding for messages that are actually new/unread — not for old
+    // history being reprocessed (e.g. on page load before chat is opened).
+    if (isUnread) {
+        try {
+            const ctx = new (window.AudioContext||window.webkitAudioContext)();
+            const osc = ctx.createOscillator(), gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.frequency.value = 880; gain.gain.value = 0.05;
+            osc.start(); osc.stop(ctx.currentTime + 0.08); ctx.close();
+        } catch {}
+    }
+}
+
+async function chatPoll() {
+    // Poll for messages newer than the last one we have
+    try {
+        const r = await fetch(API + '/api/chat/history');
+        if (!r.ok) return;
+        const msgs = await r.json();
+        const lastKnown = _chatMessages.length ? _chatMessages[_chatMessages.length - 1].ts : 0;
+        msgs.filter(m => m.ts > lastKnown).forEach(chatReceiveMsg);
+    } catch {}
+}
+
+function chatConnect() {
+    if (_chatPollTimer) clearInterval(_chatPollTimer);
+    _chatPollTimer = setInterval(chatPoll, 3000);
+}
+function chatDisconnect() {
+    if (_chatSSE) { _chatSSE.close(); _chatSSE = null; }
+    if (_chatPollTimer) { clearInterval(_chatPollTimer); _chatPollTimer = null; }
+}
+
+function chatScrollBottom() {
+    const c = document.getElementById('chatMessages');
+    if (c) c.scrollTop = c.scrollHeight;
+}
+
+function chatUpdateBadge() {
+    const badge = document.getElementById('chatBadge');
+    if (!badge) return;
+    const text = _chatUnread > 99 ? '99+' : String(_chatUnread);
+    if (_chatUnread > 0) {
+        badge.classList.add('visible');
+        badge.textContent = text;
+    } else {
+        badge.classList.remove('visible');
+    }
+}
+
+// ── Send message ──────────────────────────────────────────────────────────
+window.chatSend = async function() {
+    const inp = document.getElementById('chatInput');
+    const text = (inp.value || '').trim();
+    if (!text) return;
+    inp.value = '';
+    inp.style.height = 'auto';
+    const user = getChatUser();
+    try {
+        await fetch(API + '/api/chat/send', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ text, sender: user.name, senderId: user.id })
+        });
+    } catch(e) { console.error('[chat] send failed:', e.message); }
+};
+
+// ── Chat open/close (standalone) ─────────────────────────────────────────
+// Chat is now docked to the LEFT (beside the sidebar rail, see #ww-chat's
+// CSS override in styles.css) instead of the right — grouped visually with
+// Pricelist/Notifications/Settings, so it has no dark backdrop and closes
+// whichever of those side panels was open, same as they close each other.
+window.chatOpen = async function() {
+    const el = document.getElementById('ww-chat');
+    if (!el) return;
+    if (el.classList.contains('w-visible')) {
+        el.classList.remove('w-visible');
+        _chatOpen = false;
+        chatDisconnect();
+        return;
+    }
+    // Close any other docked tool first — only one panel is shown at a time.
+    document.querySelectorAll('.w-window.w-visible').forEach(otherEl => {
+        const k = otherEl.id.replace('ww-', '');
+        if (k !== 'chat' && window.wClose) window.wClose(k);
+    });
+    document.querySelectorAll('.side-panel.open').forEach(p => p.classList.remove('open'));
+    document.getElementById('navSidebar')?.classList.remove('expanded');
+    el.classList.add('w-visible');
+    _chatOpen = true;
+    _chatUnread = 0;
+    chatUpdateBadge();
+    // Persist read timestamp so badge stays cleared across sessions
+    const now = Date.now();
+    _chatSetLastRead(now);
+    await chatLoadHistory();
+    chatConnect();
+    setTimeout(() => document.getElementById('chatInput')?.focus(), 100);
+};
+
+window.chatClose = function() {
+    const el = document.getElementById('ww-chat');
+    if (el) el.classList.remove('w-visible');
+    _chatOpen = false;
+    chatDisconnect();
+};
+
+// Start polling and compute initial unread badge from history
+chatInitUnread();
+chatConnect();
+
+})();
+</script>
+
+<!-- ── Account Settings modal JS (ported from menu.html — requested
+     2026-07). Wrapped in its own IIFE with an acctset- prefix on every
+     local name so nothing here can collide with this page's own globals
+     (openSettings/closeSettings/etc. only ever existed as onclick targets
+     for the removed menu.html link, not as functions on this page). ── -->
+<script>
+(function(){
+'use strict';
+const ACCTSET_API = window.location.origin;
+let acctsetSession = null;
+let acctsetCurrentTab = 'profile';
+let acctsetPendingSig = null;
+let acctsetRemoveSigFlag = false;
+
+function acctsetGetSession() { try { return JSON.parse(sessionStorage.getItem('lp_session')); } catch { return null; } }
+function acctsetAuthHeaders() {
+    return acctsetSession && acctsetSession.token
+        ? { 'Authorization': 'Bearer ' + acctsetSession.token }
+        : { 'x-session-id': acctsetSession ? acctsetSession.id : '' };
+}
+function acctsetSignOutAfterSave() {
+    setTimeout(() => {
+        sessionStorage.removeItem('lp_session');
+        sessionStorage.removeItem('lp_dev_mode');
+        window.location.replace('login.html');
+    }, 3000);
+}
+
+window.openAcctSettings = function() {
+    acctsetSession = acctsetGetSession();
+    if (!acctsetSession) return;
+    document.getElementById('acctsetName').value     = acctsetSession.name     || '';
+    document.getElementById('acctsetPosition').value = acctsetSession.position || '';
+    document.getElementById('acctsetContact').value  = acctsetSession.contact  || '';
+    document.getElementById('acctsetEmail').value    = acctsetSession.email    || '';
+
+    acctsetClearPinRow('acctsetPinRowCurrent');
+    acctsetClearPinRow('acctsetPinRowNew');
+    acctsetClearPinRow('acctsetPinRowConfirm');
+    document.getElementById('acctsetPinCurrentHint').textContent = 'Enter your current PIN to verify.';
+    document.getElementById('acctsetPinCurrentHint').style.color = '';
+    document.getElementById('acctsetPinMatchHint').innerHTML = '&nbsp;';
+
+    acctsetPendingSig = null;
+    acctsetRemoveSigFlag = false;
+    const hasSig = !!(acctsetSession.signature);
+    document.getElementById('acctsetSigPreviewWrap').classList.toggle('show', hasSig);
+    document.getElementById('acctsetSigDropArea').classList.toggle('hidden', hasSig);
+    document.getElementById('acctsetSigReplaceBtn').classList.toggle('show', hasSig);
+    if (hasSig) document.getElementById('acctsetSigPreviewImg').src = acctsetSession.signature;
+    document.getElementById('acctsetSigCurrentNote').textContent =
+        hasSig ? 'This signature appears on your generated quotations and job orders.' : '';
+
+    switchAcctSettingsTab('profile');
+    acctsetClearStatus();
+    document.getElementById('acctsetOverlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+};
+
+window.closeAcctSettings = function() {
+    document.getElementById('acctsetOverlay').classList.remove('open');
+    document.body.style.overflow = '';
+};
+
+window.acctsetOverlayClick = function(e) {
+    if (e.target === document.getElementById('acctsetOverlay')) closeAcctSettings();
+};
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const ov = document.getElementById('acctsetOverlay');
+        if (ov && ov.classList.contains('open')) closeAcctSettings();
+    }
+});
+
+function switchAcctSettingsTab(tab) {
+    acctsetCurrentTab = tab;
+    ['profile','pin','signature'].forEach(t => {
+        document.getElementById('acctsetTab-' + t).classList.toggle('active', t === tab);
+        document.getElementById('acctsetPanel-' + t).classList.toggle('active', t === tab);
+    });
+    acctsetClearStatus();
+}
+window.switchAcctSettingsTab = switchAcctSettingsTab;
+
+function acctsetShowStatus(msg, type) {
+    const el = document.getElementById('acctsetStatus');
+    el.textContent = msg;
+    el.className = 'acctset-status ' + type;
+}
+function acctsetClearStatus() {
+    const el = document.getElementById('acctsetStatus');
+    el.className = 'acctset-status';
+    el.textContent = '';
+}
+
+function acctsetWirePinRow(rowId, onComplete) {
+    const digits = Array.from(document.querySelectorAll('#' + rowId + ' .acctset-pin-digit'));
+    digits.forEach((d, i) => {
+        d.addEventListener('input', e => {
+            const v = e.target.value.replace(/\D/g, '');
+            e.target.value = v ? v[0] : '';
+            e.target.classList.toggle('filled', !!v);
+            if (v && i < digits.length - 1) digits[i + 1].focus();
+            if (onComplete) onComplete();
+        });
+        d.addEventListener('keydown', e => {
+            if (e.key === 'Backspace' && !d.value && i > 0) {
+                digits[i - 1].value = '';
+                digits[i - 1].classList.remove('filled');
+                digits[i - 1].focus();
+                if (onComplete) onComplete();
+            }
+        });
+        d.addEventListener('paste', e => {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
+            digits.forEach((dd, ii) => {
+                dd.value = text[ii] || '';
+                dd.classList.toggle('filled', !!dd.value);
+            });
+            const firstEmpty = digits.findIndex(dd => !dd.value);
+            (firstEmpty === -1 ? digits[digits.length - 1] : digits[firstEmpty]).focus();
+            if (onComplete) onComplete();
+        });
+    });
+}
+function acctsetGetPinFromRow(rowId) {
+    return Array.from(document.querySelectorAll('#' + rowId + ' .acctset-pin-digit')).map(d => d.value).join('');
+}
+function acctsetClearPinRow(rowId) {
+    document.querySelectorAll('#' + rowId + ' .acctset-pin-digit').forEach(d => {
+        d.value = '';
+        d.classList.remove('filled', 'error');
+    });
+}
+function acctsetMarkPinError(rowId) {
+    document.querySelectorAll('#' + rowId + ' .acctset-pin-digit').forEach(d => {
+        d.classList.add('error');
+        setTimeout(() => d.classList.remove('error'), 600);
+    });
+}
+function acctsetCheckPinMatch() {
+    const n = acctsetGetPinFromRow('acctsetPinRowNew');
+    const c = acctsetGetPinFromRow('acctsetPinRowConfirm');
+    const hint = document.getElementById('acctsetPinMatchHint');
+    if (c.length === 4) {
+        if (n === c) { hint.style.color = '#1e8449'; hint.textContent = '✓ PINs match'; }
+        else { hint.style.color = '#b71c1c'; hint.textContent = '✗ PINs do not match'; }
+    } else {
+        hint.innerHTML = '&nbsp;';
+    }
+}
+acctsetWirePinRow('acctsetPinRowCurrent', null);
+acctsetWirePinRow('acctsetPinRowNew', acctsetCheckPinMatch);
+acctsetWirePinRow('acctsetPinRowConfirm', acctsetCheckPinMatch);
+
+function acctsetHandleSigBlob(file) {
+    const reader = new FileReader();
+    reader.onload = e => {
+        acctsetPendingSig = e.target.result;
+        acctsetRemoveSigFlag = false;
+        document.getElementById('acctsetSigPreviewImg').src = acctsetPendingSig;
+        document.getElementById('acctsetSigPreviewWrap').classList.add('show');
+        document.getElementById('acctsetSigDropArea').classList.add('hidden');
+        document.getElementById('acctsetSigReplaceBtn').classList.add('show');
+        document.getElementById('acctsetSigCurrentNote').textContent = 'New signature ready to save.';
+        acctsetClearStatus();
+    };
+    reader.readAsDataURL(file);
+}
+window.showAcctSigUpload = function() {
+    document.getElementById('acctsetSigPreviewWrap').classList.remove('show');
+    document.getElementById('acctsetSigReplaceBtn').classList.remove('show');
+    document.getElementById('acctsetSigDropArea').classList.remove('hidden');
+    document.getElementById('acctsetSigCurrentNote').textContent = '';
+};
+window.handleAcctSigFile = function(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+        acctsetShowStatus('Image too large. Maximum size is 2 MB.', 'error');
+        input.value = '';
+        return;
+    }
+    acctsetHandleSigBlob(file);
+};
+window.removeAcctSig = function() {
+    acctsetPendingSig = null;
+    acctsetRemoveSigFlag = true;
+    document.getElementById('acctsetSigPreviewWrap').classList.remove('show');
+    document.getElementById('acctsetSigPreviewImg').src = '';
+    document.getElementById('acctsetSigFileInput').value = '';
+    document.getElementById('acctsetSigDropArea').classList.remove('hidden');
+    document.getElementById('acctsetSigReplaceBtn').classList.remove('show');
+    document.getElementById('acctsetSigCurrentNote').textContent = 'Signature will be removed when you save.';
+};
+
+(function() {
+    const dropArea = document.getElementById('acctsetSigDropArea');
+    if (!dropArea) return;
+    dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.classList.add('dragover'); });
+    dropArea.addEventListener('dragleave', () => dropArea.classList.remove('dragover'));
+    dropArea.addEventListener('drop', e => {
+        e.preventDefault();
+        dropArea.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) {
+            if (file.size > 2 * 1024 * 1024) { acctsetShowStatus('Image too large. Max 2 MB.', 'error'); return; }
+            acctsetHandleSigBlob(file);
+        }
+    });
+})();
+
+window.saveAcctSettings = async function() {
+    acctsetClearStatus();
+    const btn = document.getElementById('acctsetBtnSave');
+
+    if (acctsetCurrentTab === 'profile') {
+        const name    = document.getElementById('acctsetName').value.trim();
+        const contact = document.getElementById('acctsetContact').value.trim();
+        if (!name)    { acctsetShowStatus('Name cannot be empty.', 'error'); return; }
+        if (!contact) { acctsetShowStatus('Contact number cannot be empty.', 'error'); return; }
+
+        btn.classList.add('loading'); btn.disabled = true;
+        try {
+            const r = await fetch(ACCTSET_API + '/api/profiles/' + encodeURIComponent(acctsetSession.id) + '/self', {
+                method: 'PATCH',
+                headers: Object.assign({ 'Content-Type': 'application/json' }, acctsetAuthHeaders()),
+                body: JSON.stringify({ name, contact })
+            });
+            if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.error || 'Server error'); }
+            acctsetSession.name = name;
+            acctsetSession.contact = contact;
+            sessionStorage.setItem('lp_session', JSON.stringify(acctsetSession));
+            acctsetShowStatus('✓ Profile updated! Signing you out in 3 seconds…', 'success');
+            acctsetSignOutAfterSave();
+        } catch (e) {
+            acctsetShowStatus('Error: ' + e.message, 'error');
+        } finally {
+            btn.classList.remove('loading'); btn.disabled = false;
+        }
+        return;
+    }
+
+    if (acctsetCurrentTab === 'pin') {
+        const current = acctsetGetPinFromRow('acctsetPinRowCurrent');
+        const newPin  = acctsetGetPinFromRow('acctsetPinRowNew');
+        const confirm = acctsetGetPinFromRow('acctsetPinRowConfirm');
+        if (current.length !== 4) { acctsetShowStatus('Enter your current 4-digit PIN.', 'error'); acctsetMarkPinError('acctsetPinRowCurrent'); return; }
+        if (newPin.length  !== 4) { acctsetShowStatus('Enter a new 4-digit PIN.', 'error'); acctsetMarkPinError('acctsetPinRowNew'); return; }
+        if (newPin !== confirm)   { acctsetShowStatus('New PINs do not match.', 'error'); acctsetMarkPinError('acctsetPinRowConfirm'); return; }
+        if (newPin === current)   { acctsetShowStatus('New PIN must be different from your current PIN.', 'error'); return; }
+
+        btn.classList.add('loading'); btn.disabled = true;
+        try {
+            const r = await fetch(ACCTSET_API + '/api/profiles/' + encodeURIComponent(acctsetSession.id) + '/self-pin', {
+                method: 'PATCH',
+                headers: Object.assign({ 'Content-Type': 'application/json' }, acctsetAuthHeaders()),
+                body: JSON.stringify({ currentPin: current, newPin })
+            });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                if (r.status === 401) {
+                    acctsetMarkPinError('acctsetPinRowCurrent');
+                    acctsetClearPinRow('acctsetPinRowCurrent');
+                    document.getElementById('acctsetPinCurrentHint').textContent = '✗ Incorrect current PIN.';
+                    document.getElementById('acctsetPinCurrentHint').style.color = '#b71c1c';
+                    throw new Error('Incorrect current PIN.');
+                }
+                throw new Error(err.error || 'Server error');
+            }
+            acctsetShowStatus('✓ PIN changed! Signing you out in 3 seconds…', 'success');
+            acctsetSignOutAfterSave();
+        } catch (e) {
+            acctsetShowStatus('Error: ' + e.message, 'error');
+        } finally {
+            btn.classList.remove('loading'); btn.disabled = false;
+        }
+        return;
+    }
+
+    if (acctsetCurrentTab === 'signature') {
+        if (!acctsetPendingSig && !acctsetRemoveSigFlag) {
+            acctsetShowStatus('No changes to save. Upload a new signature or remove the existing one.', 'error');
+            return;
+        }
+        btn.classList.add('loading'); btn.disabled = true;
+        try {
+            const r = await fetch(ACCTSET_API + '/api/profiles/' + encodeURIComponent(acctsetSession.id) + '/self', {
+                method: 'PATCH',
+                headers: Object.assign({ 'Content-Type': 'application/json' }, acctsetAuthHeaders()),
+                body: JSON.stringify({ signature: acctsetPendingSig || null })
+            });
+            if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.error || 'Server error'); }
+            acctsetSession.signature = acctsetPendingSig || null;
+            sessionStorage.setItem('lp_session', JSON.stringify(acctsetSession));
+            acctsetShowStatus('✓ Signature saved! Signing you out in 3 seconds…', 'success');
+            acctsetSignOutAfterSave();
+        } catch (e) {
+            acctsetShowStatus('Error: ' + e.message, 'error');
+        } finally {
+            btn.classList.remove('loading'); btn.disabled = false;
+        }
+        return;
+    }
+};
+
+})();
+</script>

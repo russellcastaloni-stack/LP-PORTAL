@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Launchpad Portal – Home</title>
+    <link rel="icon" type="image/png" href="ICONS/LPwhite.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        #pageLoader {
+            position: fixed; inset: 0; z-index: 99999;
+            background: #fff;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 14px;
+            transition: opacity .18s ease;
+        }
+        #pageLoader.pl-hide { opacity: 0; pointer-events: none; }
+        .pl-spinner {
+            width: 40px; height: 40px;
+            border: 4px solid #e3e7ee; border-top-color: #1A2B45;
+            border-radius: 50%;
+            animation: pl-spin .7s linear infinite;
+        }
+        @keyframes pl-spin { to { transform: rotate(360deg); } }
+        #pageLoaderText { font-size: 13px; font-weight: 600; color: #7a8699; }
+
+        /* ── Design tokens — Material Design (MUI) palette ── */
+        :root {
+            --blue:       #1976d2;
+            --navy:       #1A2B45;
+            --teal:       #00695c;
+            --teal-dark:  #004d40;
+            --green:      #2e7d32;
+            --green-dark: #1b5e20;
+            --red:        #d32f2f;
+            --radius-card: 4px;
+            --shadow-card: 0px 11px 15px -7px rgba(0,0,0,0.2),0px 24px 38px 3px rgba(0,0,0,0.14),0px 9px 46px 8px rgba(0,0,0,0.12);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body { height: 100%; }
+        body {
+            font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #060a14; /* fallback while the spotlight image loads */
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 40px 20px 32px;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* ── Windows Spotlight-style wallpaper: a random static image from
+           ICONS/spotlight/ on every page load. No gradient/starfield layered
+           on top anymore. ── */
+        .bg-image {
+            position: fixed; inset: 0; width: 100%; height: 100%;
+            object-fit: cover; z-index: -1; pointer-events: none;
+            opacity: 0; transition: opacity .4s ease;
+        }
+        .bg-image.loaded { opacity: 1; }
+
+        /* ── Card (transparent positioning wrapper — visuals live on
+           .glass-panel below so it can size to just the content) ── */
+        .card {
+            position: relative;
+            z-index: 1;
+            background: transparent;
+            padding: 0;
+            width: 100%;
+            max-width: 640px;
+            text-align: center;
+            animation: slideUp 0.4s cubic-bezier(0.16,1,0.3,1) both;
+        }
+
+        /* ── Glass panel — the whole menu sits on one frosted surface so
+           it stays readable no matter how busy the wallpaper photo is. ── */
+        .glass-panel {
+            background: rgba(8, 12, 24, 0.55);
+            backdrop-filter: blur(500px) saturate(140%);
+            -webkit-backdrop-filter: blur(20px) saturate(140%);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 18px;
+            padding: 28px 24px 24px;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+        }
+
+        .logo { max-width: 160px; height: auto; margin-bottom: 10px; }
+
+        /* ── Welcome row ── */
+        .welcome-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-top: 14px;
+            margin-bottom: 26px;
+            text-align: left;
+        }
+
+        .avatar {
+            width: 44px; height: 44px;
+            border-radius: 50%;
+            background: var(--blue);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; font-weight: bold; color: #fff;
+            flex-shrink: 0;
+            letter-spacing: -0.5px;
+            align-self: center;
+        }
+
+        .welcome-text { flex: 1; min-width: 0; align-self: center; }
+        .welcome-label { font-size: 11px; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 2px; }
+        .welcome-name  { font-size: 16px; font-weight: bold; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+        .welcome-role  { font-size: 11px; color: #8fb4d9; margin-top: 1px; }
+
+        /* ── Gear button ── */
+        .gear-btn {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255,255,255,0.08);
+            color: #6fb3f7;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            align-self: center;
+            transition: background 0.18s, transform 0.3s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .gear-btn:hover { background: rgba(255,255,255,0.16); }
+        .gear-btn:active { transform: rotate(60deg); }
+
+        /* ── Section labels ── */
+        .section-label {
+            font-size: 10px; font-weight: bold;
+            text-transform: uppercase; letter-spacing: 1.2px;
+            color: rgba(255,255,255,0.4); text-align: left;
+            margin: 4px 0 10px 2px;
+        }
+
+        /* ── Menu grid (card tiles) ── */
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        @media (min-width: 600px) {
+            .menu-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+
+        .tile {
+            position: relative;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 8px;
+            min-height: 96px;
+            padding: 18px 10px;
+            border-radius: 14px; border: 1px solid rgba(255,255,255,0.08);
+            cursor: pointer; text-align: center;
+            transform-style: preserve-3d;
+            will-change: transform;
+            transition: box-shadow 0.15s ease-out, background 0.22s ease, transform 0.15s ease-out;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        .tile.active-tile {
+            background: rgba(0,105,92,0.4);
+            border-color: rgba(255,255,255,0.14);
+            box-shadow: 0px 3px 1px -2px rgba(0,0,0,0.2),0px 2px 2px 0px rgba(0,0,0,0.14),0px 1px 5px 0px rgba(0,0,0,0.12);
+        }
+        .tile.active-tile:hover { background: rgba(0,105,92,0.55); }
+        .tile.disabled-tile { background: rgba(255,255,255,0.04); cursor: not-allowed; }
+
+        .tile-icon {
+            width: 42px; height: 42px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+            transition: transform 0.22s cubic-bezier(0.4,0,0.2,1), background 0.22s ease;
+        }
+        .active-tile   .tile-icon { background: rgba(255,255,255,0.18); }
+        .disabled-tile .tile-icon { background: rgba(255,255,255,0.06); }
+        .tile.active-tile:hover .tile-icon { transform: scale(1.1) rotate(-4deg); }
+
+        .tile-title { font-size: 12px; font-weight: 500; letter-spacing: 0.4px; text-transform: uppercase; line-height: 1.25; }
+        .active-tile   .tile-title { color: #fff; }
+        .disabled-tile .tile-title { color: #9aa6b4; }
+
+        .tile-lock {
+            position: absolute; top: 6px; right: 6px;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 4px; padding: 2px 6px;
+            font-size: 9px; font-weight: 700;
+            color: #9aa6b4; letter-spacing: 0.4px;
+            white-space: nowrap;
+        }
+
+        .btn-signout {
+            display: block; width: 100%; margin-top: 22px; padding: 12px;
+            background: none; border: 1px solid rgba(255,255,255,0.16); border-radius: 4px;
+            font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.6px;
+            color: rgba(255,255,255,0.55); cursor: pointer;
+            transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.15s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .btn-signout:hover { background: rgba(211,47,47,0.1); color: #ff6b6b; border-color: #ff6b6b; }
+        .btn-signout:active { background: rgba(211,47,47,0.08); transform: scale(0.98); }
+
+        /* ── Footer ── */
+        footer { position: relative; z-index: 1; width: 100%; max-width: 640px; margin-top: 24px; text-align: center; }
+        .footer-copyright { color: rgba(255,255,255,0.4); font-size: 11px; font-weight: bold; letter-spacing: 0.2px; }
+
+        /* ── Animations ── */
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(18px) scale(0.97); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .card { animation: slideUp 0.4s cubic-bezier(0.16,1,0.3,1) both; }
+        .menu-grid .tile:nth-child(1) { animation: slideUp 0.4s 0.05s cubic-bezier(0.34,1.2,0.64,1) both; }
+        .menu-grid .tile:nth-child(2) { animation: slideUp 0.4s 0.11s cubic-bezier(0.34,1.2,0.64,1) both; }
+        .menu-grid .tile:nth-child(3) { animation: slideUp 0.4s 0.17s cubic-bezier(0.34,1.2,0.64,1) both; }
+        @media (prefers-reduced-motion: reduce) { .card, .tile { animation: none; transition: none; } }
+
+        /* ════════════════════════════════════════
+           SETTINGS MODAL
+        ════════════════════════════════════════ */
+        .modal-overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(15,25,40,0.65);
+            backdrop-filter: blur(3px);
+            -webkit-backdrop-filter: blur(3px);
+            z-index: 100;
+            align-items: flex-end;        /* sheet slides up from bottom */
+            justify-content: center;
+            padding: 0;
+        }
+        .modal-overlay.open { display: flex; }
+
+        .modal-sheet {
+            background: #fff;
+            border-radius: 4px 4px 0 0;
+            width: 100%;
+            max-width: 480px;
+            max-height: 92dvh;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 0 0 env(safe-area-inset-bottom, 16px);
+            animation: sheetUp 0.28s cubic-bezier(0.34,1.2,0.64,1) both;
+        }
+        @keyframes sheetUp {
+            from { transform: translateY(100%); opacity: 0; }
+            to   { transform: translateY(0);    opacity: 1; }
+        }
+
+        /* drag pill */
+        .sheet-pill {
+            width: 40px; height: 4px;
+            background: #dde2ea;
+            border-radius: 4px;
+            margin: 12px auto 0;
+        }
+
+        .sheet-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px 0;
+            position: sticky; top: 0;
+            background: #fff;
+            z-index: 1;
+            border-bottom: 1px solid #f0f2f5;
+            padding-bottom: 14px;
+        }
+        .sheet-title { font-size: 17px; font-weight: bold; color: var(--navy); }
+        .sheet-close {
+            width: 32px; height: 32px; border-radius: 50%;
+            border: none; background: #f0f2f5;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; font-size: 16px; color: #666;
+            -webkit-tap-highlight-color: transparent;
+            transition: background 0.15s;
+        }
+        .sheet-close:hover { background: #e3e7ee; }
+
+        /* ── Tab bar ── */
+        .sheet-tabs {
+            display: flex; gap: 0;
+            padding: 12px 20px 0;
+            border-bottom: 1px solid #f0f2f5;
+        }
+        .tab-btn {
+            flex: 1; padding: 9px 4px;
+            border: none; background: none;
+            font-size: 13px; font-weight: bold;
+            color: #aab0bc; cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: color 0.15s, border-color 0.15s;
+            -webkit-tap-highlight-color: transparent;
+            letter-spacing: 0.3px;
+        }
+        .tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+        /* ── Tab panels ── */
+        .tab-panel { display: none; padding: 20px; }
+        .tab-panel.active { display: block; }
+
+        /* ── Form fields ── */
+        .field-group { margin-bottom: 16px; }
+        .field-group label {
+            display: block; font-size: 11px; font-weight: bold;
+            color: #6b7280; text-transform: uppercase; letter-spacing: 0.8px;
+            margin-bottom: 6px;
+        }
+        .field-group input[type="text"],
+        .field-group input[type="email"],
+        .field-group input[type="tel"] {
+            width: 100%; padding: 12px 14px;
+            border: 1px solid rgba(0,0,0,0.23); border-radius: 4px;
+            font-size: 15px; color: var(--navy);
+            transition: border-color 0.15s;
+            background: #fff;
+        }
+        .field-group input:focus { outline: none; border-color: var(--blue); border-width: 2px; }
+        .field-group input:read-only {
+            background: #f8f9fb; color: #9aa3b0; cursor: not-allowed;
+        }
+        .field-note {
+            font-size: 11px; color: #aab0bc; margin-top: 4px;
+        }
+
+        /* ── PIN dots ── */
+        .pin-row { display: flex; gap: 10px; justify-content: center; margin-bottom: 4px; }
+        .pin-digit {
+            width: 48px; height: 52px;
+            border: 1px solid rgba(0,0,0,0.23); border-radius: 4px;
+            font-size: 19px; text-align: center; font-weight: 500;
+            color: var(--navy);
+            transition: border-color 0.15s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        @media (max-width: 360px) { .pin-digit { width: 42px; height: 48px; } }
+        .pin-digit:focus { outline: none; border-color: var(--blue); border-width: 2px; }
+        .pin-digit.filled { border-color: var(--blue); background: #e3f2fd; }
+        .pin-digit.error  { border-color: var(--red);  background: #fdecea; animation: shake 0.3s; }
+        @keyframes shake {
+            0%,100% { transform: translateX(0); }
+            25%      { transform: translateX(-4px); }
+            75%      { transform: translateX( 4px); }
+        }
+
+        .pin-section-label {
+            font-size: 11px; font-weight: bold; color: #6b7280;
+            text-transform: uppercase; letter-spacing: 0.8px;
+            margin: 0 0 8px;
+        }
+        .pin-block { margin-bottom: 30px; }
+        .pin-block:last-child { margin-bottom: 18px; }
+        .pin-block + .pin-block { padding-top: 22px; border-top: 1px solid #f0f2f5; }
+
+        /* ── Signature upload ── */
+        .sig-upload-area {
+            border: 2px dashed #d1d9e6;
+            border-radius: 12px;
+            padding: 20px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.18s, background 0.18s;
+            -webkit-tap-highlight-color: transparent;
+            position: relative;
+        }
+        .sig-upload-area:hover, .sig-upload-area.dragover {
+            border-color: var(--blue); background: #f0f4ff;
+        }
+        .sig-upload-area input[type="file"] {
+            position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+        }
+        .sig-upload-icon { font-size: 28px; margin-bottom: 6px; }
+        .sig-upload-text { font-size: 13px; color: #6b7280; }
+        .sig-upload-sub  { font-size: 11px; color: #aab0bc; margin-top: 3px; }
+
+        .sig-upload-area.hidden { display: none; }
+
+        .sig-replace-btn {
+            display: none;
+            margin: 12px auto 0;
+            padding: 9px 18px;
+            background: none;
+            border: 1px solid #d1d9e6;
+            border-radius: 8px;
+            font-size: 13px; font-weight: bold;
+            color: var(--navy);
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .sig-replace-btn:hover { background: #f0f4ff; border-color: var(--blue); }
+        .sig-replace-btn.show { display: block; }
+
+        .sig-preview-wrap {
+            margin-top: 14px;
+            display: none;
+            position: relative;
+        }
+        .sig-preview-wrap.show { display: block; }
+        .sig-preview {
+            max-width: 100%; max-height: 100px;
+            border-radius: 8px; border: 1px solid #e2e8f0;
+            object-fit: contain; display: block; margin: 0 auto;
+        }
+        .sig-remove {
+            position: absolute; top: -8px; right: -8px;
+            width: 24px; height: 24px; border-radius: 50%;
+            background: var(--red); color: #fff;
+            border: none; font-size: 14px; line-height: 1;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* ── Status / feedback ── */
+        .sheet-status {
+            margin: 0 20px 4px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px; font-weight: bold;
+            display: none;
+        }
+        .sheet-status.success { display: block; background: #eafaf1; color: #1e8449; }
+        .sheet-status.error   { display: block; background: #fdedec; color: #b71c1c; }
+
+        /* ── Save button ── */
+        .btn-save {
+            display: block; width: calc(100% - 40px);
+            margin: 8px 20px 16px;
+            padding: 14px;
+            background: var(--navy); color: #fff;
+            border: none; border-radius: 4px;
+            font-size: 14px; font-weight: 500;
+            text-transform: uppercase; letter-spacing: 0.8px;
+            cursor: pointer;
+            transition: background 0.18s, box-shadow 0.18s;
+            -webkit-tap-highlight-color: transparent;
+            min-height: 50px;
+            box-shadow: 0px 3px 1px -2px rgba(0,0,0,0.2),0px 2px 2px 0px rgba(0,0,0,0.14),0px 1px 5px 0px rgba(0,0,0,0.12);
+        }
+        .btn-save:hover:not(:disabled) { background: #102036; box-shadow: 0px 2px 4px -1px rgba(0,0,0,0.2),0px 4px 5px 0px rgba(0,0,0,0.14),0px 1px 10px 0px rgba(0,0,0,0.12); }
+        .btn-save:disabled { background: rgba(0,0,0,0.12); color: rgba(0,0,0,0.26); cursor: not-allowed; box-shadow: none; }
+
+        .spinner-inline {
+            display: none;
+            width: 18px; height: 18px;
+            border: 2px solid rgba(255,255,255,0.4);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .btn-save.loading .btn-save-text { display: none; }
+        .btn-save.loading .spinner-inline { display: inline-block; }
+
+        /* Hidden until renderWelcome() reveals it for admin-role accounts */
+        .admin-only { display: none; }
+
+        /* ════════════════════════════════════════
+           ANNOUNCEMENT FAB + COMPOSE MODAL
+        ════════════════════════════════════════ */
+        .announce-fab {
+            position: fixed;
+            right: 24px; bottom: 24px;
+            width: 56px; height: 56px;
+            border-radius: 50%;
+            border: none;
+            background: #c8952a;
+            color: #fff;
+            font-size: 24px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+            z-index: 90;
+            transition: transform 0.15s, box-shadow 0.15s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .announce-fab:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0,0,0,0.4); }
+        @media (max-width: 480px) {
+            .announce-fab { right: 16px; bottom: 16px; width: 50px; height: 50px; font-size: 20px; }
+        }
+
+        .announce-current {
+            margin: 0 20px 14px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            background: #fff8e6;
+            border: 1px solid #f0d999;
+            font-size: 12px;
+            color: #7a5b00;
+            display: none;
+        }
+        .announce-current.show { display: block; }
+
+        .field-group textarea {
+            width: 100%; padding: 12px 14px;
+            border: 1px solid rgba(0,0,0,0.23); border-radius: 4px;
+            font-size: 15px; color: var(--navy);
+            font-family: inherit;
+            resize: vertical;
+            min-height: 90px;
+            transition: border-color 0.15s;
+            background: #fff;
+        }
+        .field-group textarea:focus { outline: none; border-color: var(--blue); border-width: 2px; }
+
+        .btn-clear-announce {
+            display: block; width: calc(100% - 40px);
+            margin: 0 20px 10px;
+            padding: 12px;
+            background: #fff; color: var(--red);
+            border: 1px solid rgba(211,47,47,0.4); border-radius: 4px;
+            font-size: 13px; font-weight: bold;
+            text-transform: uppercase; letter-spacing: 0.6px;
+            cursor: pointer;
+            transition: background 0.15s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .btn-clear-announce:hover:not(:disabled) { background: #fdedec; }
+        .btn-clear-announce:disabled { color: rgba(0,0,0,0.26); border-color: rgba(0,0,0,0.12); cursor: not-allowed; }
+
+    </style>
+</head>
+<body>
+
+<div id="pageLoader">
+    <div class="pl-spinner"></div>
+    <div id="pageLoaderText">Loading…</div>
+</div>
+<script>
+    window.addEventListener('load', function() {
+        var loader = document.getElementById('pageLoader');
+        if (!loader) return;
+        setTimeout(function () { loader.classList.add('pl-hide'); }, 200);
+    });
+    setTimeout(function () {
+        var loader = document.getElementById('pageLoader');
+        if (loader) loader.classList.add('pl-hide');
+    }, 4000);
+</script>
+
+<img class="bg-image" id="bgImage" alt="" aria-hidden="true">
+
+<div class="card">
+  <div class="glass-panel">
+    <a href="https://launchpadph.com/" target="_blank" rel="noopener">
+        <img src="ICONS/LPplain.png" alt="Launchpad Logo" class="logo" onerror="this.style.display='none'">
+    </a>
+    <!-- Welcome row -->
+    <div class="welcome-row">
+        <div class="avatar" id="userAvatar" aria-hidden="true">?</div>
+        <div class="welcome-text">
+            <div class="welcome-label">Welcome back</div>
+            <div class="welcome-name" id="userName">Loading...</div>
+            <div class="welcome-role" id="userRole"></div>
+        </div>
+        <button class="gear-btn" onclick="openSettings()" aria-label="Account settings" title="Account settings">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Create Forms -->
+    <div class="section-label">Submit Forms</div>
+    <div class="menu-grid" id="formsGrid">
+        <button class="tile active-tile" onclick="goTo('index.html')">
+            <div class="tile-icon" aria-hidden="true">📄</div>
+            <div class="tile-title">Quotations</div>
+        </button>
+        <button class="tile active-tile" onclick="goTo('jo.html')">
+            <div class="tile-icon" aria-hidden="true">📋</div>
+            <div class="tile-title">Job Orders</div>
+        </button>
+        <button class="tile active-tile" onclick="goTo('proofing.html')">
+            <div class="tile-icon" aria-hidden="true">🖨️</div>
+            <div class="tile-title">Proofing</div>
+        </button>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="section-label">Trackers</div>
+    <div class="menu-grid" id="dashboardGrid">
+        <button class="tile active-tile" onclick="goTo('dashboard.html')">
+            <div class="tile-icon" aria-hidden="true">📊</div>
+            <div class="tile-title">Sales Dashboard</div>
+        </button>
+        <button class="tile disabled-tile" disabled aria-disabled="true">
+            <div class="tile-icon" aria-hidden="true">📦</div>
+            <div class="tile-title">JO Tracker</div>
+            <span class="tile-lock">Soon</span>
+        </button>
+    </div>
+
+    <button class="btn-signout" onclick="signOut()">Sign Out</button>
+  </div>
+</div>
+
+</div>
+
+<footer>
+    <div class="footer-copyright">Copyright &copy; 2026 Launchpad Holdings OPC. All Rights Reserved.</div>
+</footer>
+
+<!-- ══════════════════════════════════════════
+     SETTINGS MODAL (bottom sheet)
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="settingsOverlay" onclick="overlayClick(event)" role="dialog" aria-modal="true" aria-label="Account Settings">
+    <div class="modal-sheet" id="settingsSheet">
+        <div class="sheet-pill"></div>
+
+        <div class="sheet-header">
+            <span class="sheet-title">⚙️ Account Settings</span>
+            <button class="sheet-close" onclick="closeSettings()" aria-label="Close settings">✕</button>
+        </div>
+
+        <!-- Tabs -->
+        <div class="sheet-tabs">
+            <button class="tab-btn active" onclick="switchTab('profile')"   id="tab-profile">Profile</button>
+            <button class="tab-btn"        onclick="switchTab('pin')"       id="tab-pin">Change PIN</button>
+            <button class="tab-btn"        onclick="switchTab('signature')" id="tab-signature">E-Signature</button>
+        </div>
+
+        <!-- ── Tab: Profile ── -->
+        <div class="tab-panel active" id="panel-profile">
+            <div class="field-group">
+                <label for="set-name">Full Name</label>
+                <input type="text" id="set-name" maxlength="100" placeholder="Your full name">
+            </div>
+            <div class="field-group">
+                <label>Position / Title</label>
+                <input type="text" id="set-position" maxlength="100" readonly tabindex="-1">
+                <div class="field-note">Contact Admin to change your position.</div>
+            </div>
+            <div class="field-group">
+                <label for="set-contact">Contact Number</label>
+                <input type="tel" id="set-contact" maxlength="50" placeholder="+63 900 000 0000">
+            </div>
+            <div class="field-group">
+                <label>Email</label>
+                <input type="email" id="set-email" maxlength="200" readonly tabindex="-1">
+                <div class="field-note">Contact Admin to change your email.</div>
+            </div>
+        </div>
+
+        <!-- ── Tab: Change PIN ── -->
+        <div class="tab-panel" id="panel-pin">
+            <div class="pin-block">
+                <div class="pin-section-label">Current PIN</div>
+                <div class="pin-row" id="pinRowCurrent">
+                    <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="Current PIN digit 1">
+                    <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="Current PIN digit 2">
+                    <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="Current PIN digit 3">
+                    <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="Current PIN digit 4">
+                </div>
+                <div class="field-note" style="text-align:center; margin-top:6px;" id="pinCurrentHint">Enter your current PIN to verify.</div>
+            </div>
+            <div class="pin-block">
+                <div class="pin-section-label">New PIN</div>
+                <div class="pin-row" id="pinRowNew">
+                    <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="New PIN digit 1">
+                    <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="New PIN digit 2">
+                    <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="New PIN digit 3">
+                    <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="New PIN digit 4">
+                </div>
+            </div>
+            <div class="pin-block">
+                <div class="pin-section-label">Confirm New PIN</div>
+                <div class="pin-row" id="pinRowConfirm">
+                    <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="Confirm PIN digit 1">
+                    <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="Confirm PIN digit 2">
+                    <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="Confirm PIN digit 3">
+                    <input class="pin-digit" type="password" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" aria-label="Confirm PIN digit 4">
+                </div>
+                <div class="field-note" style="text-align:center; margin-top:6px;" id="pinMatchHint">&nbsp;</div>
+            </div>
+        </div>
+
+        <!-- ── Tab: E-Signature ── -->
+        <div class="tab-panel" id="panel-signature">
+            <p style="font-size:13px; color:#6b7280; margin-bottom:14px;">
+                Upload a PNG or JPG of your signature. It will appear on generated quotations and job orders.
+                Transparent background PNG works best.
+            </p>
+            <div class="sig-upload-area" id="sigDropArea">
+                <input type="file" id="sigFileInput" accept="image/png,image/jpeg,image/jpg" onchange="handleSigFile(this)">
+                <div class="sig-upload-icon">🖊️</div>
+                <div class="sig-upload-text">Tap to upload your signature</div>
+                <div class="sig-upload-sub">PNG (transparent bg) or JPG · Max 2 MB</div>
+            </div>
+            <div class="sig-preview-wrap" id="sigPreviewWrap">
+                <img id="sigPreviewImg" class="sig-preview" src="" alt="Signature preview">
+                <button class="sig-remove" onclick="removeSig()" aria-label="Remove signature">✕</button>
+            </div>
+            <button class="sig-replace-btn" id="sigReplaceBtn" onclick="showSigUpload()">Replace Signature</button>
+            <div class="field-note" style="margin-top: 10px;" id="sigCurrentNote"></div>
+        </div>
+
+        <!-- Status bar + save -->
+        <div class="sheet-status" id="sheetStatus"></div>
+        <button class="btn-save" id="btnSave" onclick="saveSettings()">
+            <span class="btn-save-text">Save Changes</span>
+            <span class="spinner-inline" aria-hidden="true"></span>
+        </button>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ANNOUNCEMENT FAB (admin-only) + COMPOSE MODAL
+══════════════════════════════════════════ -->
+<button class="announce-fab admin-only" id="announceFab" style="display:none;" onclick="openAnnouncement()" title="Post announcement" aria-label="Post announcement">📢</button>
+
+<div class="modal-overlay" id="announcementOverlay" onclick="overlayClickAnnouncement(event)" role="dialog" aria-modal="true" aria-label="Announcement">
+    <div class="modal-sheet" id="announcementSheet">
+        <div class="sheet-pill"></div>
+
+        <div class="sheet-header">
+            <span class="sheet-title">📢 Announcement</span>
+            <button class="sheet-close" onclick="closeAnnouncement()" aria-label="Close announcement">✕</button>
+        </div>
+
+        <div class="tab-panel active" style="padding-top:18px;">
+            <div class="announce-current" id="announceCurrent"></div>
+            <div class="field-group">
+                <label for="announce-message">Message</label>
+                <textarea id="announce-message" maxlength="500" placeholder="e.g. New update is live — please save your work and reload (Ctrl+Shift+R / Cmd+Shift+R on Mac)."></textarea>
+            </div>
+            <div class="field-group" style="display:flex; align-items:flex-start; gap:8px;">
+                <input type="checkbox" id="announce-show-reload" style="width:16px; height:16px; margin-top:2px;" onchange="onShowReloadChange()">
+                <label for="announce-show-reload" style="text-transform:none; font-weight:normal; font-size:13px; color:var(--navy); letter-spacing:normal;">
+                    Show a "Reload now" button on the banner (for update/deploy announcements).
+                </label>
+            </div>
+            <div class="field-group" style="display:flex; align-items:flex-start; gap:8px;">
+                <input type="checkbox" id="announce-force-reload" style="width:16px; height:16px; margin-top:2px;" onchange="onForceReloadChange()">
+                <label for="announce-force-reload" style="text-transform:none; font-weight:normal; font-size:13px; color:var(--navy); letter-spacing:normal;">
+                    Force-reload all active sessions automatically (~15s after posting). Make sure your message tells people to save their work first.
+                </label>
+            </div>
+        </div>
+
+        <div class="sheet-status" id="announceStatus"></div>
+        <button class="btn-clear-announce" id="btnClearAnnounce" onclick="clearAnnouncement()" disabled>Clear Live Announcement</button>
+        <button class="btn-save" id="btnPostAnnounce" onclick="postAnnouncement()">
+            <span class="btn-save-text">Post Announcement</span>
+            <span class="spinner-inline" aria-hidden="true"></span>
+        </button>
+    </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════
+   SPOTLIGHT WALLPAPER — picks a random image from ICONS/spotlight/ (via the
+   server, since a static file host can't be directory-listed from the
+   browser) on every page load, so the background is different each refresh.
+══════════════════════════════════════════ */
+(function() {
+    const img = document.getElementById('bgImage');
+    if (!img) return;
+    fetch('/api/spotlight-images')
+        .then(r => r.json())
+        .catch(() => [])
+        .then(files => {
+            if (!Array.isArray(files) || !files.length) return; // none uploaded yet — keep the solid fallback color
+            const pick = files[Math.floor(Math.random() * files.length)];
+            img.addEventListener('load', function() { img.classList.add('loaded'); }, { once: true });
+            img.src = 'ICONS/spotlight/' + encodeURIComponent(pick);
+        });
+})();
+
+/* ══════════════════════════════════════════
+   3D TILT ON HOVER (active tiles only)
+══════════════════════════════════════════ */
+(function() {
+    function wireTilt(tile) {
+        // The entrance "slideUp" animation holds the transform property (fill-mode: both)
+        // at a higher cascade priority than inline styles, which silently blocks our
+        // JS-driven tilt. Release it once the entrance animation finishes.
+        tile.addEventListener('animationend', function() {
+            tile.style.animation = 'none';
+        }, { once: true });
+        // Fallback in case animationend never fires (e.g. reduced-motion disabled the animation)
+        setTimeout(function() { tile.style.animation = 'none'; }, 800);
+
+        function onMove(e) {
+            const rect = tile.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const cx = rect.width / 2, cy = rect.height / 2;
+            const rotateY = ((x - cx) / cx) * 12;
+            const rotateX = -((y - cy) / cy) * 12;
+            tile.style.transform = 'perspective(500px) rotateX(' + rotateX + 'deg) rotateY(' + rotateY + 'deg) translateY(-8px) scale(1.05)';
+            tile.style.boxShadow = '0 20px 30px -10px rgba(0,0,0,0.5), 0 0 20px rgba(29,158,117,0.35)';
+        }
+        function onLeave() {
+            tile.style.transform = 'perspective(500px) rotateX(0deg) rotateY(0deg) translateY(0) scale(1)';
+            tile.style.boxShadow = '';
+        }
+        tile.addEventListener('mousemove', onMove);
+        tile.addEventListener('mouseleave', onLeave);
+        tile.addEventListener('pointermove', onMove);
+        tile.addEventListener('pointerleave', onLeave);
+    }
+    document.querySelectorAll('.tile.active-tile').forEach(wireTilt);
+
+    // Re-wire whenever new active tiles are injected (e.g. Admin Panel tile)
+    const observer = new MutationObserver(() => {
+        document.querySelectorAll('.tile.active-tile:not([data-tilt-wired])').forEach(t => {
+            t.setAttribute('data-tilt-wired', '1');
+            wireTilt(t);
+        });
+    });
+    document.querySelectorAll('.tile.active-tile').forEach(t => t.setAttribute('data-tilt-wired', '1'));
+    observer.observe(document.body, { childList: true, subtree: true });
+})();
+
+/* ══════════════════════════════════════════
+   SESSION & AUTH
+══════════════════════════════════════════ */
+
+// ── Session header injection — must run before any fetch call ─────────────
+(function() {
+    const _origFetch = window.fetch;
+    window.fetch = function(url, opts) {
+        if (typeof url === 'string' && url.includes('/api/')) {
+            opts = opts ? Object.assign({}, opts) : {};
+            opts.headers = Object.assign({}, opts.headers || {});
+            try {
+                const s = sessionStorage.getItem('lp_session');
+                if (s) {
+                    const p = JSON.parse(s);
+                    if (p && p.token) opts.headers['Authorization'] = 'Bearer ' + p.token;
+                    else if (p && p.id) opts.headers['X-Session-Id'] = p.id; // legacy fallback
+                }
+            } catch {}
+        }
+        return _origFetch.call(this, url, opts);
+    };
+})();
+
+// ── Drive-offline health check ────────────────────────────────────────────
+(function() {
+    function showDriveBanner(msg) {
+        if (document.getElementById('_driveBanner')) return;
+        var b = document.createElement('div');
+        b.id = '_driveBanner';
+        b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#b71c1c;color:white;' +
+            'padding:10px 16px;font-size:13px;font-weight:bold;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+        b.innerHTML = '⚠️ ' + msg + ' &nbsp;<button onclick="document.getElementById(\'_driveBanner\').remove();checkDriveHealth();" ' +
+            'style="background:rgba(255,255,255,0.25);border:none;color:white;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;">Retry</button>';
+        document.body ? document.body.prepend(b) : document.addEventListener('DOMContentLoaded', function(){ document.body.prepend(b); });
+    }
+    window.checkDriveHealth = function() {
+        fetch(window.location.origin + '/api/health')
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (!d.ok) {
+                    var msg = !d.drive
+                        ? 'Google Drive is disconnected on the server. Reconnect the G: drive and retry.'
+                        : 'Server data unavailable — check G: drive.';
+                    showDriveBanner(msg);
+                } else {
+                    var old = document.getElementById('_driveBanner');
+                    if (old) old.remove();
+                }
+            }).catch(function(){});
+    };
+    window.addEventListener('load', window.checkDriveHealth);
+})();
+
+function getSession() {
+    try { return JSON.parse(sessionStorage.getItem('lp_session')); } catch { return null; }
+}
+function isDevMode() {
+    return new URLSearchParams(window.location.search).get('dev') === '1'
+        || sessionStorage.getItem('lp_dev_mode') === '1';
+}
+
+if (isDevMode()) {
+    sessionStorage.setItem('lp_dev_mode', '1');
+    const existing = getSession();
+    if (!existing || !existing.id || existing.id === '__dev__') {
+        sessionStorage.setItem('lp_session', JSON.stringify({
+            id: '__dev__', name: 'Dev User', position: 'Developer', contact: '', email: '',
+            token: '__dev__'
+        }));
+    }
+}
+
+let session = getSession();
+if (!session || !session.id) {
+    window.location.replace('login.html');
+}
+
+function renderWelcome() {
+    session = getSession();
+    if (!session) return;
+    const firstName = (session.name || '').split(' ')[0] || session.name;
+    const initials  = (session.name || '?').split(' ').map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+    const isAdmin   = session.role === 'admin';
+
+    // Avatar — gold for admin
+    const avatarEl = document.getElementById('userAvatar');
+    avatarEl.textContent = initials;
+    avatarEl.style.background = isAdmin ? '#c8952a' : '';
+
+    // Name + ADMIN badge
+    const badge = isAdmin
+        ? `<span style="display:inline-block;background:#c8952a;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-left:7px;letter-spacing:0.6px;vertical-align:middle;line-height:1.6;">ADMIN</span>`
+        : '';
+    document.getElementById('userName').innerHTML = firstName + badge;
+    document.getElementById('userRole').textContent = isAdmin
+        ? (session.position || 'All Quotes Visible')
+        : session.position || '';
+
+    // Show Admin Panel button for admin-role accounts
+    if (isAdmin) {
+        document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
+        // Admin Panel tile — inject once
+        if (!document.getElementById('adminPanelBtn')) {
+            const adminBtn = document.createElement('button');
+            adminBtn.id = 'adminPanelBtn';
+            adminBtn.className = 'tile active-tile';
+            adminBtn.style.cssText = 'border: 2px solid #c8952a;';
+            adminBtn.onclick = () => goTo('admin.html');
+            adminBtn.innerHTML = `
+                <div class="tile-icon" aria-hidden="true">🛠</div>
+                <div class="tile-title">Admin Panel</div>`;
+            const dashGrid = document.getElementById('dashboardGrid');
+            if (dashGrid) dashGrid.insertBefore(adminBtn, dashGrid.firstChild);
+        }
+    }
+}
+renderWelcome();
+
+// The persistent sidebar's "Account Settings" entry on the other forms
+// (Quotations/JO/Proofing) doesn't duplicate this modal — it just links
+// here with ?openSettings=1 so this same Profile/PIN/E-Signature UI opens.
+if (new URLSearchParams(window.location.search).get('openSettings') === '1') {
+    openSettings();
+    history.replaceState(null, '', window.location.pathname);
+}
+
+const GOTO_LABELS = {
+    'index.html': 'Quotations',
+    'jo.html': 'Job Orders',
+    'proofing.html': 'Proofing',
+    'dashboard.html': 'Sales Dashboard',
+    'admin.html': 'Admin Panel'
+};
+function goTo(url) {
+    var loader = document.getElementById('pageLoader');
+    if (loader) {
+        var text = document.getElementById('pageLoaderText');
+        var label = GOTO_LABELS[url];
+        if (text) text.textContent = label ? ('Loading ' + label + '…') : 'Loading…';
+        loader.classList.remove('pl-hide');
+    }
+    window.location.href = url;
+}
+
+function signOut() {
+    sessionStorage.removeItem('lp_session');
+    sessionStorage.removeItem('lp_dev_mode');
+    window.location.replace('login.html');
+}
+
+
+/* ══════════════════════════════════════════
+   SETTINGS MODAL
+══════════════════════════════════════════ */
+const API = window.location.origin;
+let currentTab = 'profile';
+let pendingSigBase64 = null;   // base64 of newly uploaded sig
+let removeSigFlag    = false;  // user explicitly removed existing sig
+
+function openSettings() {
+    session = getSession();
+    // Populate profile tab
+    document.getElementById('set-name').value     = session.name     || '';
+    document.getElementById('set-position').value = session.position || '';
+    document.getElementById('set-contact').value  = session.contact  || '';
+    document.getElementById('set-email').value    = session.email    || '';
+
+    // Reset PIN fields
+    clearPinRow('pinRowCurrent');
+    clearPinRow('pinRowNew');
+    clearPinRow('pinRowConfirm');
+    document.getElementById('pinCurrentHint').textContent = 'Enter your current PIN to verify.';
+    document.getElementById('pinMatchHint').innerHTML = '&nbsp;';
+
+    // Signature: show existing if any, hide the upload dropzone when there's already one on file
+    pendingSigBase64 = null;
+    removeSigFlag    = false;
+    const hasSig = !!(session.signature);
+    document.getElementById('sigPreviewWrap').classList.toggle('show', hasSig);
+    document.getElementById('sigDropArea').classList.toggle('hidden', hasSig);
+    document.getElementById('sigReplaceBtn').classList.toggle('show', hasSig);
+    if (hasSig) document.getElementById('sigPreviewImg').src = session.signature;
+    document.getElementById('sigCurrentNote').textContent =
+        hasSig ? 'This signature appears on your generated quotations and job orders.' : '';
+
+    switchTab('profile');
+    clearStatus();
+    document.getElementById('settingsOverlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeSettings() {
+    document.getElementById('settingsOverlay').classList.remove('open');
+    document.body.style.overflow = '';
+}
+
+function overlayClick(e) {
+    if (e.target === document.getElementById('settingsOverlay')) closeSettings();
+}
+
+// Close on Escape
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeSettings();
+});
+
+/* ── Tabs ── */
+function switchTab(tab) {
+    currentTab = tab;
+    ['profile','pin','signature'].forEach(t => {
+        document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
+        document.getElementById(`panel-${t}`).classList.toggle('active', t === tab);
+    });
+    clearStatus();
+}
+
+/* ── Status ── */
+function showStatus(msg, type) {
+    const el = document.getElementById('sheetStatus');
+    el.textContent = msg;
+    el.className   = 'sheet-status ' + type;
+}
+function clearStatus() {
+    const el = document.getElementById('sheetStatus');
+    el.className = 'sheet-status';
+    el.textContent = '';
+}
+
+/* ══════════════════════════════════════════
+   ANNOUNCEMENT (admin-only) — manual broadcast banner
+   Replaces the old auto-detect-a-deploy notifier: an admin explicitly
+   posts/clears a message here, and every active session (see
+   update-notifier.js) polls /api/announcement and shows it as a top banner.
+══════════════════════════════════════════ */
+function announceAuthHeaders() {
+    return session.token ? { 'Authorization': 'Bearer ' + session.token } : { 'x-session-id': session.id };
+}
+
+function showAnnounceStatus(msg, type) {
+    const el = document.getElementById('announceStatus');
+    el.textContent = msg;
+    el.className   = 'sheet-status ' + type;
+}
+function clearAnnounceStatus() {
+    const el = document.getElementById('announceStatus');
+    el.className = 'sheet-status';
+    el.textContent = '';
+}
+
+async function openAnnouncement() {
+    clearAnnounceStatus();
+    document.getElementById('announcementOverlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    const curEl     = document.getElementById('announceCurrent');
+    const clearBtn  = document.getElementById('btnClearAnnounce');
+    curEl.classList.remove('show');
+    curEl.textContent = '';
+    clearBtn.disabled = true;
+    document.getElementById('announce-message').value = '';
+    document.getElementById('announce-show-reload').checked = false;
+    document.getElementById('announce-show-reload').disabled = false;
+    document.getElementById('announce-force-reload').checked = false;
+    try {
+        const r = await fetch(`${API}/api/announcement`, { headers: announceAuthHeaders() });
+        const d = await r.json();
+        if (d && d.id) {
+            document.getElementById('announce-message').value = d.message || '';
+            document.getElementById('announce-show-reload').checked = !!d.showReload || !!d.forceReload;
+            document.getElementById('announce-force-reload').checked = !!d.forceReload;
+            if (d.forceReload) document.getElementById('announce-show-reload').disabled = true;
+            curEl.textContent = `Currently live — posted by ${d.postedBy || 'Admin'} at ${new Date(d.postedAt).toLocaleString()}${d.forceReload ? ' (force-reload was on)' : ''}`;
+            curEl.classList.add('show');
+            clearBtn.disabled = false;
+        }
+    } catch {}
+}
+
+function closeAnnouncement() {
+    document.getElementById('announcementOverlay').classList.remove('open');
+    document.body.style.overflow = '';
+}
+
+function overlayClickAnnouncement(e) {
+    if (e.target === document.getElementById('announcementOverlay')) closeAnnouncement();
+}
+
+// Force-reload inherently needs the Reload button (it's how someone skips
+// the countdown), so keep the two checkboxes in sync instead of allowing a
+// confusing "force reload but hide the reload button" combination.
+function onForceReloadChange() {
+    const force = document.getElementById('announce-force-reload').checked;
+    const showReloadBox = document.getElementById('announce-show-reload');
+    if (force) {
+        showReloadBox.checked = true;
+        showReloadBox.disabled = true;
+    } else {
+        showReloadBox.disabled = false;
+    }
+}
+function onShowReloadChange() {
+    // Turning the reload button off obviously can't coexist with force-reload.
+    if (!document.getElementById('announce-show-reload').checked) {
+        document.getElementById('announce-force-reload').checked = false;
+    }
+}
+
+async function postAnnouncement() {
+    const message = document.getElementById('announce-message').value.trim();
+    if (!message) { showAnnounceStatus('Message cannot be empty.', 'error'); return; }
+    const showReload  = document.getElementById('announce-show-reload').checked;
+    const forceReload = document.getElementById('announce-force-reload').checked;
+
+    const btn = document.getElementById('btnPostAnnounce');
+    btn.classList.add('loading'); btn.disabled = true;
+    try {
+        const r = await fetch(`${API}/api/announcement`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...announceAuthHeaders() },
+            body: JSON.stringify({ message, showReload, forceReload })
+        });
+        if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            throw new Error(err.error || 'Server error');
+        }
+        showAnnounceStatus('✓ Announcement posted to all active sessions.', 'success');
+        document.getElementById('btnClearAnnounce').disabled = false;
+        if (window.__lpCheckAnnouncement) window.__lpCheckAnnouncement();
+    } catch (e) {
+        showAnnounceStatus('Error: ' + e.message, 'error');
+    } finally {
+        btn.classList.remove('loading'); btn.disabled = false;
+    }
+}
+
+async function clearAnnouncement() {
+    const btn = document.getElementById('btnClearAnnounce');
+    btn.disabled = true;
+    try {
+        const r = await fetch(`${API}/api/announcement`, {
+            method: 'DELETE',
+            headers: announceAuthHeaders()
+        });
+        if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            throw new Error(err.error || 'Server error');
+        }
+        document.getElementById('announce-message').value = '';
+        document.getElementById('announceCurrent').classList.remove('show');
+        showAnnounceStatus('✓ Announcement cleared.', 'success');
+        if (window.__lpCheckAnnouncement) window.__lpCheckAnnouncement();
+    } catch (e) {
+        showAnnounceStatus('Error: ' + e.message, 'error');
+        btn.disabled = false;
+    }
+}
+
+// Close on Escape (announcement modal too)
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeAnnouncement();
+});
+
+/* ── PIN row helpers ── */
+function wirePinRow(rowId, onComplete) {
+    const digits = Array.from(document.querySelectorAll(`#${rowId} .pin-digit`));
+    digits.forEach((d, i) => {
+        d.addEventListener('input', e => {
+            const v = e.target.value.replace(/\D/g, '');
+            e.target.value = v ? v[0] : '';
+            e.target.classList.toggle('filled', !!v);
+            if (v && i < digits.length - 1) digits[i + 1].focus();
+            if (onComplete) onComplete();
+        });
+        d.addEventListener('keydown', e => {
+            if (e.key === 'Backspace' && !d.value && i > 0) {
+                digits[i - 1].value = '';
+                digits[i - 1].classList.remove('filled');
+                digits[i - 1].focus();
+                if (onComplete) onComplete();
+            }
+        });
+        d.addEventListener('paste', e => {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
+            digits.forEach((dd, ii) => {
+                dd.value = text[ii] || '';
+                dd.classList.toggle('filled', !!dd.value);
+            });
+            const firstEmpty = digits.findIndex(dd => !dd.value);
+            (firstEmpty === -1 ? digits[digits.length - 1] : digits[firstEmpty]).focus();
+            if (onComplete) onComplete();
+        });
+    });
+}
+
+function getPinFromRow(rowId) {
+    return Array.from(document.querySelectorAll(`#${rowId} .pin-digit`)).map(d => d.value).join('');
+}
+
+function clearPinRow(rowId) {
+    document.querySelectorAll(`#${rowId} .pin-digit`).forEach(d => {
+        d.value = '';
+        d.classList.remove('filled', 'error');
+    });
+}
+
+function markPinError(rowId) {
+    document.querySelectorAll(`#${rowId} .pin-digit`).forEach(d => {
+        d.classList.add('error');
+        setTimeout(() => d.classList.remove('error'), 600);
+    });
+}
+
+function checkPinMatch() {
+    const n = getPinFromRow('pinRowNew');
+    const c = getPinFromRow('pinRowConfirm');
+    const hint = document.getElementById('pinMatchHint');
+    if (c.length === 4) {
+        if (n === c) {
+            hint.style.color = '#1e8449';
+            hint.textContent = '✓ PINs match';
+        } else {
+            hint.style.color = '#b71c1c';
+            hint.textContent = '✗ PINs do not match';
+        }
+    } else {
+        hint.innerHTML = '&nbsp;';
+    }
+}
+
+wirePinRow('pinRowCurrent', null);
+wirePinRow('pinRowNew', checkPinMatch);
+wirePinRow('pinRowConfirm', checkPinMatch);
+
+/* ── Signature ── */
+function showSigUpload() {
+    document.getElementById('sigPreviewWrap').classList.remove('show');
+    document.getElementById('sigReplaceBtn').classList.remove('show');
+    document.getElementById('sigDropArea').classList.remove('hidden');
+    document.getElementById('sigCurrentNote').textContent = '';
+}
+
+function handleSigFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+        showStatus('Image too large. Maximum size is 2 MB.', 'error');
+        input.value = '';
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+        pendingSigBase64 = e.target.result;
+        removeSigFlag    = false;
+        document.getElementById('sigPreviewImg').src = pendingSigBase64;
+        document.getElementById('sigPreviewWrap').classList.add('show');
+        document.getElementById('sigDropArea').classList.add('hidden');
+        document.getElementById('sigReplaceBtn').classList.add('show');
+        document.getElementById('sigCurrentNote').textContent = 'New signature ready to save.';
+        clearStatus();
+    };
+    reader.readAsDataURL(file);
+}
+
+function removeSig() {
+    pendingSigBase64 = null;
+    removeSigFlag    = true;
+    document.getElementById('sigPreviewWrap').classList.remove('show');
+    document.getElementById('sigPreviewImg').src = '';
+    document.getElementById('sigFileInput').value = '';
+    document.getElementById('sigDropArea').classList.remove('hidden');
+    document.getElementById('sigReplaceBtn').classList.remove('show');
+    document.getElementById('sigCurrentNote').textContent = 'Signature will be removed when you save.';
+}
+
+// Drag-and-drop on sig area
+const dropArea = document.getElementById('sigDropArea');
+dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.classList.add('dragover'); });
+dropArea.addEventListener('dragleave', () => dropArea.classList.remove('dragover'));
+dropArea.addEventListener('drop', e => {
+    e.preventDefault();
+    dropArea.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+        const input = document.getElementById('sigFileInput');
+        // Can't set files directly; use FileReader
+        if (file.size > 2 * 1024 * 1024) { showStatus('Image too large. Max 2 MB.', 'error'); return; }
+        const reader = new FileReader();
+        reader.onload = ev => {
+            pendingSigBase64 = ev.target.result;
+            removeSigFlag    = false;
+            document.getElementById('sigPreviewImg').src = pendingSigBase64;
+            document.getElementById('sigPreviewWrap').classList.add('show');
+            document.getElementById('sigDropArea').classList.add('hidden');
+            document.getElementById('sigReplaceBtn').classList.add('show');
+            document.getElementById('sigCurrentNote').textContent = 'New signature ready to save.';
+            clearStatus();
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+/* ══════════════════════════════════════════
+   SAVE SETTINGS
+══════════════════════════════════════════ */
+async function saveSettings() {
+    clearStatus();
+    const btn = document.getElementById('btnSave');
+
+    /* ── Profile tab ── */
+    if (currentTab === 'profile') {
+        const name    = document.getElementById('set-name').value.trim();
+        const contact = document.getElementById('set-contact').value.trim();
+
+        if (!name)    { showStatus('Name cannot be empty.', 'error'); return; }
+        if (!contact) { showStatus('Contact number cannot be empty.', 'error'); return; }
+
+        btn.classList.add('loading'); btn.disabled = true;
+        try {
+            // We call the self-update endpoint (user-authenticated by session id)
+            const r = await fetch(`${API}/api/profiles/${encodeURIComponent(session.id)}/self`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(session.token ? { 'Authorization': 'Bearer ' + session.token } : { 'x-session-id': session.id })
+                },
+                body: JSON.stringify({ name, contact })
+            });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                throw new Error(err.error || 'Server error');
+            }
+            // Update session
+            session.name    = name;
+            session.contact = contact;
+            sessionStorage.setItem('lp_session', JSON.stringify(session));
+            renderWelcome();
+            showStatus('✓ Profile updated! Signing you out in 3 seconds…', 'success');
+            setTimeout(signOut, 3000);
+        } catch (e) {
+            showStatus('Error: ' + e.message, 'error');
+        } finally {
+            btn.classList.remove('loading'); btn.disabled = false;
+        }
+        return;
+    }
+
+    /* ── PIN tab ── */
+    if (currentTab === 'pin') {
+        const current = getPinFromRow('pinRowCurrent');
+        const newPin  = getPinFromRow('pinRowNew');
+        const confirm = getPinFromRow('pinRowConfirm');
+
+        if (current.length !== 4) { showStatus('Enter your current 4-digit PIN.', 'error'); markPinError('pinRowCurrent'); return; }
+        if (newPin.length  !== 4) { showStatus('Enter a new 4-digit PIN.', 'error'); markPinError('pinRowNew'); return; }
+        if (newPin !== confirm)   { showStatus('New PINs do not match.', 'error'); markPinError('pinRowConfirm'); return; }
+        if (newPin === current)   { showStatus('New PIN must be different from your current PIN.', 'error'); return; }
+
+        btn.classList.add('loading'); btn.disabled = true;
+        try {
+            const r = await fetch(`${API}/api/profiles/${encodeURIComponent(session.id)}/self-pin`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(session.token ? { 'Authorization': 'Bearer ' + session.token } : { 'x-session-id': session.id })
+                },
+                body: JSON.stringify({ currentPin: current, newPin })
+            });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                if (r.status === 401) {
+                    markPinError('pinRowCurrent');
+                    clearPinRow('pinRowCurrent');
+                    document.getElementById('pinCurrentHint').textContent = '✗ Incorrect current PIN.';
+                    document.getElementById('pinCurrentHint').style.color = '#b71c1c';
+                    throw new Error('Incorrect current PIN.');
+                }
+                throw new Error(err.error || 'Server error');
+            }
+            showStatus('✓ PIN changed! Signing you out in 3 seconds…', 'success');
+            setTimeout(signOut, 3000);
+        } catch (e) {
+            showStatus('Error: ' + e.message, 'error');
+        } finally {
+            btn.classList.remove('loading'); btn.disabled = false;
+        }
+        return;
+    }
+
+    /* ── Signature tab ── */
+    if (currentTab === 'signature') {
+        if (!pendingSigBase64 && !removeSigFlag) {
+            showStatus('No changes to save. Upload a new signature or remove the existing one.', 'error');
+            return;
+        }
+
+        btn.classList.add('loading'); btn.disabled = true;
+        try {
+            const r = await fetch(`${API}/api/profiles/${encodeURIComponent(session.id)}/self`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(session.token ? { 'Authorization': 'Bearer ' + session.token } : { 'x-session-id': session.id })
+                },
+                body: JSON.stringify({ signature: pendingSigBase64 || null })
+            });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                throw new Error(err.error || 'Server error');
+            }
+            session.signature = pendingSigBase64 || null;
+            sessionStorage.setItem('lp_session', JSON.stringify(session));
+            showStatus('✓ Signature saved! Signing you out in 3 seconds…', 'success');
+            setTimeout(signOut, 3000);
+        } catch (e) {
+            showStatus('Error: ' + e.message, 'error');
+        } finally {
+            btn.classList.remove('loading'); btn.disabled = false;
+        }
+        return;
+    }
+}
+</script>
+<script src="update-notifier.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,1616 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root { --navbar-h: 56px; }
+
+body {
+    font-family: Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: radial-gradient(ellipse at 50% -10%, #16223a 0%, #0a1120 55%, #060a14 100%);
+    min-height: 100vh;
+    padding: 16px 12px 24px;
+}
+
+#starfield {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.container {
+    position: relative;
+    z-index: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 4px;
+    padding: 20px 16px;
+    box-shadow: 0px 11px 15px -7px rgba(0,0,0,0.2),0px 24px 38px 3px rgba(0,0,0,0.14),0px 9px 46px 8px rgba(0,0,0,0.12);
+}
+
+@media (min-width: 600px) {
+    body { padding: 20px; }
+    .container { padding: 30px; }
+}
+
+/* Persistent left icon-rail sidebar (see #navSidebar below) pushes all page
+   content right so it never overlaps the form. Placed after the media
+   block above so it wins the cascade at every viewport width. */
+body { padding-left: 68px; }
+@media (min-width: 600px) { body { padding-left: 76px; } }
+/* Fixed top navbar (see .session-bar) — reserve its height so page content
+   doesn't start underneath it. */
+body { padding-top: calc(var(--navbar-h, 56px) + 16px); }
+@media (min-width: 600px) { body { padding-top: calc(var(--navbar-h, 56px) + 20px); } }
+
+.section {
+    margin-bottom: 20px;
+    padding: 16px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    border: 1px solid #e9ecef;
+}
+
+h3 {
+    color: #2C3E50;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #1976d2;
+    font-size: 15px;
+}
+
+/* ── Form grid: 1 col on mobile, 2 on tablet+ ── */
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+@media (min-width: 560px) {
+    .form-grid { grid-template-columns: repeat(2, 1fr); gap: 15px; }
+}
+
+.form-group { display: flex; flex-direction: column; }
+.form-group.full-width { grid-column: 1 / -1; }
+
+label {
+    font-size: 12px;
+    font-weight: bold;
+    color: #34495e;
+    margin-bottom: 5px;
+}
+
+input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 16px; /* prevents iOS zoom */
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+}
+select {
+    appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23667085' stroke-width='1.5' fill='none' fill-rule='evenodd'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+    cursor: pointer;
+}
+select::-ms-expand { display: none; }
+/* Firefox draws its own dotted inner focus ring on <select> regardless of
+   outline:none — this neutralizes it so our box-shadow ring is the only
+   focus indicator, matching text inputs. */
+select:-moz-focusring { color: transparent; text-shadow: 0 0 0 #2C3E50; }
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: #1976d2;
+    border-width: 2px;
+}
+
+/* ── Control Number Bar ── */
+.ctrl-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    margin-bottom: 20px;
+    padding: 8px 12px;
+    background: #f0f4ff;
+    border-radius: 6px;
+    border: 1px solid #c5d5f0;
+}
+.ctrl-label { font-size: 12px; font-weight: bold; color: #1976d2; }
+.ctrl-number {
+    font-size: 15px;
+    font-weight: bold;
+    color: #2c3e50;
+    letter-spacing: 1px;
+    font-family: 'Courier New', monospace;
+}
+.ctrl-rev {
+    font-size: 12px;
+    color: #d32f2f;
+    font-weight: bold;
+}
+.btn-history {
+    background: #1976d2;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 36px;
+}
+.btn-history:hover { background: #1565c0; }
+
+/* ── History Modal ── */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 9500;
+    align-items: flex-end; /* sheet from bottom on mobile */
+    justify-content: center;
+}
+@media (min-width: 600px) {
+    .modal-overlay { align-items: center; }
+}
+.modal-overlay.open { display: flex; }
+.modal {
+    background: white;
+    border-radius: 16px 16px 0 0;
+    width: 100%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 -4px 40px rgba(0,0,0,0.25);
+}
+@media (min-width: 600px) {
+    .modal {
+        border-radius: 10px;
+        width: 680px;
+        max-width: 95vw;
+        max-height: 80vh;
+    }
+}
+/* Pricelist floating panel — slides in from the left, doesn't dim/block the
+   form (no backdrop), so the reference sheet and the form can both be visible
+   and interactive at the same time. A vertical tab stays attached to the
+   panel's right edge as the toggle, whether the panel is open or closed. */
+.pricelist-panel {
+    position: fixed;
+    top: var(--navbar-h, 56px);
+    left: 56px;
+    height: calc(100vh - var(--navbar-h, 56px));
+    width: 66.67vw;
+    max-width: 1400px;
+    background: #fff;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.18);
+    z-index: 9400;
+    transform: translateX(-100%);
+    transition: transform 0.28s ease;
+    display: flex;
+    flex-direction: column;
+}
+.pricelist-panel.open { transform: translateX(0); }
+@media (max-width: 700px) {
+    .pricelist-panel { width: 92vw; }
+}
+.pricelist-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px 10px;
+    border-bottom: 1px solid #e9ecef;
+    flex-shrink: 0;
+    height: 24px;
+    line-height: 24px;
+}
+.pricelist-zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: #f0f4ff;
+    border: 1px solid #c5d5f0;
+    border-radius: 10px;
+    padding: 1px 2px;
+}
+.pricelist-zoom-controls button {
+    width: 14px;
+    height: 14px;
+    border: none;
+    border-radius: 50%;
+    background: #fff;
+    color: #1976d2;
+    font-size: 10px;
+    font-weight: bold;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.pricelist-zoom-controls button:hover { background: #1976d2; color: #fff; }
+.pricelist-zoom-controls span {
+    font-size: 8px;
+    font-weight: bold;
+    color: #1A2B45;
+    min-width: 22px;
+    text-align: center;
+}
+/* Dedicated close button (not the shared .btn-close-modal, which is also
+   used by the History modal and needs to stay full-size there) so the
+   Pricelist header can be shrunk down independently. */
+.pricelist-panel-close {
+    background: none;
+    border: none;
+    font-size: 13px;
+    cursor: pointer;
+    color: #999;
+    line-height: 1;
+    padding: 0 3px;
+    min-width: 14px;
+    min-height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.pricelist-panel-close:hover { color: #d32f2f; }
+/* Zoom wrapper: lets the sheet content be visually scaled via the +/- buttons
+   without affecting the rest of the page. Ctrl+wheel was tried first but
+   couldn't reliably be intercepted — once the cursor/focus is over the
+   cross-origin iframe, the browser's own native whole-page zoom won on that
+   gesture regardless of our own wheel listener, so buttons replace it. */
+.pricelist-zoom-wrap {
+    position: relative;
+    flex: 1;
+    /* No overflow/scroll here on purpose — the width/height-compensation
+       trick in applyPricelistZoom() (JS) keeps the iframe's painted/visual
+       size pinned to exactly 100% of this wrapper at every zoom level, so
+       this element itself never actually needs to scroll. It was previously
+       set to `overflow:auto`, which gave it its OWN scrollbars on top of the
+       sheet's own native ones — the visible "double scrollbar" bug — even
+       though there was never really any overflow for it to handle. The
+       iframe's own scrollbars (Google Sheets' native UI) are what pan around
+       the zoomed content. */
+    overflow: hidden;
+}
+.pricelist-zoom-wrap iframe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform-origin: 0 0;
+}
+/* ═══════════════════════════════════════════════════════════════
+   PERSISTENT LEFT ICON-RAIL SIDEBAR
+   Replaces the old .pricelist-tab edge-tab + the old bottom-right
+   .w-tools-trigger FAB. One persistent rail, always visible, with a
+   column of icon buttons (Home / Pricelist / Notifications / Chat) plus
+   a bottom-pinned Settings gear. Docked panels (Pricelist, Notifications,
+   Settings, and now Chat) all slide in from the left, immediately beside
+   the rail, via the shared .side-panel class below. ═══════════════ */
+#navSidebar {
+    position: fixed;
+    top: var(--navbar-h, 56px);
+    left: 0;
+    width: 56px;
+    height: calc(100vh - var(--navbar-h, 56px));
+    background: #1A2B45;
+    z-index: 9500;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 0 14px;
+    box-sizing: border-box;
+    transition: width .22s ease, padding .22s ease;
+}
+.nav-logo {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    margin-bottom: 22px;
+    pointer-events: none;
+    user-select: none;
+    flex-shrink: 0;
+}
+.nav-icons { display: flex; flex-direction: column; gap: 4px; width: 100%; align-items: center; }
+.nav-icon {
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+    font-size: 19px;
+    transition: background .15s, width .22s ease;
+}
+.nav-icon img { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }
+.nav-icon:hover { background: rgba(255,255,255,.10); }
+.nav-icon.active { background: #2e5ea8; }
+.nav-icon svg { flex-shrink: 0; }
+/* Reddit-style collapse/expand: collapsed (default) is icon-only at 56px;
+   expanded widens the rail (with a slide transition, see #navSidebar above)
+   and reveals a text label beside each icon. */
+.nav-label {
+    display: inline-block;
+    opacity: 0;
+    max-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: opacity .15s ease, max-width .22s ease;
+}
+#navSidebar.expanded {
+    width: 200px;
+    align-items: stretch;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+#navSidebar.expanded .nav-icon {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 0 8px;
+}
+#navSidebar.expanded .nav-label {
+    opacity: 1;
+    max-width: 140px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+}
+#navSidebar.expanded .nav-badge { position: static; margin-left: auto; }
+.nav-badge {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    background: #d32f2f;
+    color: #fff;
+    border-radius: 50%;
+    min-width: 15px;
+    height: 15px;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 15px;
+    text-align: center;
+    display: none;
+    padding: 0 2px;
+}
+.nav-badge.visible { display: inline-block; }
+.nav-spacer { flex: 1; }
+
+/* Shared left-docked slide-in panel — used by Notifications, Settings, and
+   Chat (Pricelist keeps its existing .pricelist-panel class/JS but shares
+   this same position/transform behavior). Sits immediately right of the
+   sidebar rail, no dark backdrop (form stays usable underneath). */
+.side-panel {
+    position: fixed;
+    top: var(--navbar-h, 56px);
+    left: 56px;
+    height: calc(100vh - var(--navbar-h, 56px));
+    width: 320px;
+    max-width: 88vw;
+    background: #fff;
+    box-shadow: 8px 0 32px rgba(0,0,0,.18);
+    z-index: 9400;
+    transform: translateX(-110%);
+    transition: transform .25s ease;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.side-panel.open { transform: translateX(0); }
+.side-panel-header {
+    background: #1A2B45;
+    color: #fff;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+.side-panel-header .sp-title { flex: 1; font-size: 14px; font-weight: 600; }
+.side-panel-header button {
+    background: rgba(255,255,255,.18);
+    border: none;
+    color: #fff;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.side-panel-header button:hover { background: rgba(255,255,255,.32); }
+.side-panel-body { flex: 1; overflow: auto; padding: 16px; }
+.side-empty-note {
+    color: #98a2b3;
+    font-size: 13px;
+    font-style: italic;
+    text-align: center;
+    padding: 30px 10px;
+}
+.settings-group-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #8a97ab;
+    letter-spacing: .5px;
+    margin: 4px 0 8px;
+    text-transform: uppercase;
+}
+.settings-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #f5f7fa;
+    border: 1px solid #e5e9f0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: #1A2B45;
+    cursor: pointer;
+    margin-bottom: 8px;
+    text-align: left;
+}
+.settings-btn:hover { background: #eef2f7; }
+.settings-btn .sb-icon { width: 18px; text-align: center; flex-shrink: 0; }
+/* Chat's own .w-window is right-docked by default (shared with the
+   Calculator/Calendar/Notepad/Print modals) — override just its position
+   so it slides in from the left beside the sidebar instead, matching the
+   other rail-triggered panels. */
+#ww-chat { left: 56px; right: auto; transform: translateX(-110%); box-shadow: 8px 0 32px rgba(0,0,0,.22); }
+#ww-chat.w-visible { transform: translateX(0); }
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e9ecef;
+}
+.modal-header h2 { font-size: 16px; color: #2c3e50; }
+.btn-close-modal {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #999;
+    line-height: 1;
+    padding: 4px 8px;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.btn-close-modal:hover { color: #d32f2f; }
+.modal-body { overflow-y: auto; padding: 12px 16px 20px; flex: 1; -webkit-overflow-scrolling: touch; }
+.history-empty { text-align: center; color: #aaa; padding: 30px; font-size: 14px; }
+
+.history-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    transition: background 0.15s;
+}
+.history-item:hover { background: #f0f4ff; border-color: #1976d2; }
+.history-item-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.history-ctrl {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    font-size: 12px;
+    color: #1976d2;
+    min-width: 130px;
+}
+.history-info { flex: 1; min-width: 0; }
+.history-company { font-weight: bold; font-size: 13px; color: #2c3e50; }
+.history-meta { font-size: 11px; color: #888; margin-top: 2px; }
+.history-rev {
+    font-size: 11px;
+    font-weight: bold;
+    color: #d32f2f;
+    min-width: 40px;
+    text-align: right;
+}
+.btn-delete-hist {
+    background: none;
+    border: none;
+    color: #ccc;
+    cursor: pointer;
+    font-size: 18px;
+    padding: 4px 8px;
+    min-width: 36px;
+    min-height: 36px;
+}
+.btn-delete-hist:hover { color: #d32f2f; }
+
+.btn-print-hist {
+    background: none;
+    border: none;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px 8px;
+    min-width: 36px;
+    min-height: 36px;
+}
+.btn-print-hist:hover { color: #1565c0; }
+.btn-print-hist:disabled { opacity: 0.6; cursor: default; }
+
+/* Dev: select-to-delete */
+.history-item.selected { background: #fff5f5; border-color: #d32f2f; }
+.history-checkbox { width: 18px; height: 18px; accent-color: #d32f2f; cursor: pointer; flex-shrink: 0; }
+.modal-footer {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-top: 1px solid #e9ecef;
+    background: #fff8f8;
+    border-radius: 0 0 10px 10px;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.modal-footer.dev-visible { display: flex; }
+.modal-select-all {
+    font-size: 12px;
+    color: #888;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Revision dropdown inside history card */
+.btn-rev-toggle {
+    background: #eef3fc;
+    border: 1px solid #c5d5f0;
+    border-radius: 4px;
+    color: #1976d2;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 4px 9px;
+    cursor: pointer;
+    line-height: 1.4;
+    flex-shrink: 0;
+    min-height: 32px;
+}
+.btn-rev-toggle:hover { background: #dbe7fa; }
+
+.history-rev-dropdown {
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed #e0e8f8;
+}
+.history-rev-dropdown.open { display: flex; }
+
+.history-rev-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    background: #f7f9ff;
+    border: 1px solid #e4ecfa;
+    min-height: 44px;
+}
+.history-rev-row:hover { background: #e8f0fd; border-color: #1976d2; }
+
+.history-rev-label {
+    font-size: 12px;
+    font-weight: bold;
+    color: #d32f2f;
+    min-width: 56px;
+}
+.history-rev-label.rev-original { color: #1b5e20; }
+
+.history-rev-date { font-size: 11px; color: #888; flex: 1; }
+.history-rev.rev-original-badge { color: #1b5e20; }
+
+.btn-delete-selected {
+    background: #d32f2f;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    min-height: 40px;
+}
+.btn-delete-selected:hover { background: #b71c1c; }
+.btn-delete-selected:disabled { background: #f0a8a0; cursor: not-allowed; }
+.delete-selected-count { font-size: 12px; color: #d32f2f; font-weight: bold; margin-right: auto; }
+
+/* ── Company Folder View ── */
+.company-folder {
+    border: 1px solid #e0e8f5;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    overflow: hidden;
+}
+.company-folder-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    background: #f4f7fc;
+    cursor: pointer;
+    user-select: none;
+    min-height: 48px;
+}
+.company-folder-header.open { background: #e8f0fb; border-bottom: 1px solid #d0dff5; }
+.folder-icon { font-size: 16px; flex-shrink: 0; }
+.folder-company-name { font-weight: bold; font-size: 13px; color: #2c3e50; flex: 1; }
+.folder-meta { font-size: 11px; color: #999; white-space: nowrap; }
+.folder-quote-count {
+    font-size: 11px;
+    background: #1976d2;
+    color: white;
+    border-radius: 10px;
+    padding: 1px 8px;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+.folder-chevron { font-size: 11px; color: #1976d2; font-weight: bold; flex-shrink: 0; transition: transform 0.2s; }
+.company-folder-header.open .folder-chevron { transform: rotate(90deg); }
+.company-folder-body { display: none; flex-direction: column; padding: 8px 10px; gap: 6px; background: white; }
+.company-folder-body.open { display: flex; }
+
+.btn-new-for-company {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+    background: #f0faf4;
+    border: 1px dashed #7ecfa0;
+    border-radius: 6px;
+    color: #1b5e20;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    min-height: 44px;
+}
+.btn-new-for-company:hover { background: #d5f0e0; }
+
+.history-actions { display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px dashed #e9ecef; gap: 8px; flex-wrap: wrap; }
+.btn-preview-pdf, .btn-gen-revision {
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 40px;
+}
+.btn-preview-pdf { background: #eef3fc; color: #1976d2; }
+.btn-gen-revision { background: #1976d2; color: white; }
+
+/* ══════════════════════════════════════════
+   ITEM ROWS — card-style layout on mobile,
+   grid layout on tablet+
+══════════════════════════════════════════ */
+
+.item-container { margin-bottom: 15px; width: 100%; }
+.section { overflow-x: auto; }
+
+/* Empty-state message for the main Add Items list — without this, an empty
+   #items just leaves the column headers floating above a blank void before
+   the first item is added, which reads as broken rather than "not started
+   yet". Scoped to #items specifically (not #flatRateItems/#outsourceItems,
+   which are commonly and validly empty even on a fully-filled-out quote). */
+#items:empty {
+    margin-bottom: 4px;
+}
+#items:empty::after {
+    content: "No items added yet — click \"+ Add Item\" below to start.";
+    display: block;
+    padding: 18px 4px;
+    font-size: 13px;
+    color: #98a2b3;
+    font-style: italic;
+    text-align: center;
+    border: 1px dashed #e2e8f0;
+    border-radius: 8px;
+    background: #fbfcfe;
+}
+
+/* Hide desktop headers on mobile */
+.item-header { display: none; }
+@media (min-width: 700px) {
+    .item-header {
+        display: grid;
+        grid-template-columns: 1fr 130px 70px 100px 60px 100px 36px;
+        gap: 6px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #1976d2;
+        margin-bottom: 8px;
+    }
+    .item-header span { font-size: 13px; font-weight: bold; color: #333; }
+}
+
+/* ── Item wrapper card ── */
+.item-wrapper {
+    background: white;
+    border: 1px solid #e0e8f5;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+}
+@media (min-width: 700px) {
+    .item-wrapper { background: none; border: none; border-radius: 0; padding: 0; margin-bottom: 0; }
+}
+
+/* Mobile: stacked rows */
+.item-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 8px;
+    align-items: center;
+}
+/* Description spans full width on mobile */
+.item-row > *:first-child { grid-column: 1 / -1; }
+
+@media (min-width: 700px) {
+    .item-row {
+        grid-template-columns: 1fr 130px 70px 100px 60px 100px 36px;
+        gap: 6px;
+        margin-bottom: 4px;
+    }
+    .item-row > *:first-child { grid-column: auto; }
+}
+
+/* Flat rate items */
+.flat-item-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 8px;
+    align-items: center;
+}
+.flat-item-row > *:first-child { grid-column: 1 / -1; }
+@media (min-width: 700px) {
+    .flat-item-row {
+        grid-template-columns: 3fr 130px 75px 130px 40px;
+        gap: 10px;
+        margin-bottom: 6px;
+    }
+    .flat-item-row > *:first-child { grid-column: auto; }
+}
+
+/* Mobile field labels inside item rows */
+.item-field-label {
+    display: block;
+    font-size: 10px;
+    font-weight: bold;
+    color: #888;
+    margin-bottom: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+@media (min-width: 700px) {
+    .item-field-label { display: none; }
+}
+
+.item-row input, .item-row select, .item-row textarea, .flat-item-row input, .flat-item-row textarea {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+    font-family: inherit;
+    line-height: 1.4;
+}
+.item-row input:focus, .item-row select:focus, .item-row textarea:focus,
+.flat-item-row input:focus, .flat-item-row textarea:focus { outline: none; border-color: #1976d2; }
+textarea.material { resize: none; overflow: hidden; }
+
+.size-split { display: flex; align-items: center; gap: 4px; }
+.size-split input { flex: 1; width: 0; text-align: center; font-size: 14px; }
+.size-split span { color: #7f8c8d; font-weight: bold; flex-shrink: 0; }
+
+input.flatPrice { text-align: center; }
+.flatfee-toggle { margin-bottom: 8px; }
+.flatfee-toggle label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: bold;
+    color: #2c3e50;
+    cursor: pointer;
+    min-height: 36px;
+}
+.flatfee-toggle input[type="checkbox"] { width: auto; height: auto; padding: 0; cursor: pointer; }
+
+.sizeUnit { text-align: center; cursor: pointer; }
+input.price    { text-align: right; }
+input.qty      { text-align: center; }
+input.rowTotalAmount {
+    background-color: #f8f9fa;
+    font-weight: bold;
+    border: 1px solid #ccd1d1 !important;
+    text-align: right;
+}
+
+/* ── Buttons (MUI contained/outlined hybrid) ── */
+.btn {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: background 0.2s, box-shadow 0.2s;
+    min-height: 44px;
+    touch-action: manipulation;
+}
+/* Secondary style for the less-primary "add" actions (Fixed Price / Flat
+   Fee) — these supplement the main Add Items list, so they stay muted. */
+.btn-add-outsource,
+.btn-add-flat {
+    background: #fff;
+    color: #475569;
+    border: 1.5px dashed #cbd5e1;
+    margin-top: 10px;
+    font-weight: 500;
+}
+.btn-add-outsource:hover,
+.btn-add-flat:hover {
+    background: #f4f7fc;
+    border-color: #1976d2;
+    color: #1976d2;
+}
+/* Primary CTA — "+ Add Item" is the main thing someone does on this form,
+   so it gets a solid fill instead of the dashed "empty slot" treatment
+   (which read as a disabled placeholder rather than a clickable button). */
+.btn-add {
+    background: #1976d2;
+    color: #fff;
+    border: 1.5px solid #1976d2;
+    margin-top: 10px;
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(25,118,210,0.35);
+}
+.btn-add:hover {
+    background: #1565c0;
+    border-color: #1565c0;
+    box-shadow: 0 2px 6px rgba(25,118,210,0.45);
+}
+.btn-preview-main {
+    background: #1976d2;
+    color: white;
+    flex: 1;
+    padding: 15px;
+    font-size: 15px;
+    margin-top: 20px;
+    box-shadow: 0px 3px 1px -2px rgba(0,0,0,0.2),0px 2px 2px 0px rgba(0,0,0,0.14),0px 1px 5px 0px rgba(0,0,0,0.12);
+}
+.btn-preview-main:hover { background: #1565c0; box-shadow: 0px 2px 4px -1px rgba(0,0,0,0.2),0px 4px 5px 0px rgba(0,0,0,0.14),0px 1px 10px 0px rgba(0,0,0,0.12); }
+.btn-submit {
+    background: #2e7d32;
+    color: white;
+    flex: 2;
+    padding: 15px;
+    font-size: 15px;
+    margin-top: 20px;
+    box-shadow: 0px 3px 1px -2px rgba(0,0,0,0.2),0px 2px 2px 0px rgba(0,0,0,0.14),0px 1px 5px 0px rgba(0,0,0,0.12);
+}
+.btn-submit:hover { background: #1b5e20; box-shadow: 0px 2px 4px -1px rgba(0,0,0,0.2),0px 4px 5px 0px rgba(0,0,0,0.14),0px 1px 10px 0px rgba(0,0,0,0.12); }
+
+/* ── Generate → Open switch (adds an animated status circle + label swap to
+   whichever button carries the .gen-switch class, without changing that
+   button's own size/color/position — just decorates it in place) ── */
+.gen-switch {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+.gen-switch .gen-icon-circle {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.22);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    transition: background 0.3s ease;
+}
+.gen-switch .gen-icon-circle svg {
+    width: 15px; height: 15px;
+    color: #fff;
+    position: absolute;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.gen-switch .gen-check { opacity: 0; transform: scale(0.6); }
+.gen-switch .gen-arrow  { opacity: 1; transform: scale(1); }
+.gen-switch[data-state="loading"] .gen-icon-circle {
+    animation: gen-pulse 1s ease-in-out infinite;
+}
+.gen-switch[data-state="loading"] .gen-arrow { opacity: 0.35; }
+.gen-switch[data-state="done"] .gen-icon-circle { background: rgba(255,255,255,0.9); }
+.gen-switch[data-state="done"] .gen-check { opacity: 1; transform: scale(1); color: #1b5e20; }
+.gen-switch[data-state="done"] .gen-arrow  { opacity: 0; transform: scale(0.6); }
+@keyframes gen-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(255,255,255,0.55); }
+    70%  { box-shadow: 0 0 0 9px rgba(255,255,255,0); }
+    100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); }
+}
+.btn-remove {
+    background: #d32f2f;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    height: 40px;
+    min-width: 40px;
+    padding: 0 12px;
+    cursor: pointer;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+}
+.btn-remove:hover { background: #b71c1c; }
+
+/* ── Grand total box ── */
+.grand-total-box {
+    margin-top: 20px;
+    text-align: right;
+    padding: 15px;
+    background: #edf2f7;
+    border-radius: 6px;
+}
+#total { font-size: 22px; font-weight: bold; color: #2c3e50; }
+@media (min-width: 600px) { #total { font-size: 24px; } }
+
+/* VAT row stacks on mobile */
+#vatToggleRow {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 14px;
+}
+@media (min-width: 560px) {
+    #vatToggleRow { flex-direction: row; align-items: center; gap: 20px; }
+}
+#vatToggleRow label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    color: #555;
+    font-weight: normal;
+    min-height: 36px;
+}
+
+/* Payment details + VAT section stacks on mobile */
+.grand-total-box > div:first-child {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+@media (min-width: 700px) {
+    .grand-total-box > div:first-child {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+}
+
+/* Bank dropdown */
+#bankDropdownBtn {
+    padding: 9px 34px 9px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+    cursor: pointer;
+    min-height: 44px;
+    text-align: left;
+    position: relative;
+    width: 100%;
+}
+
+/* ── Outsource items ── */
+#outsourceItems .item-wrapper { border-left: 3px solid #e67e22; }
+.fixedprice-badge {
+    display: inline-block;
+    background: #e67e22;
+    color: white;
+    font-size: 10px;
+    font-weight: bold;
+    padding: 1px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.5px;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+.outsource-base-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 6px 10px;
+    background: #fff8f3;
+    border-radius: 6px;
+    border-left: 3px solid #e67e22;
+    flex-wrap: wrap;
+}
+.outsource-base-row label { font-size: 12px; font-weight: bold; color: #e67e22; margin: 0; white-space: nowrap; }
+.outsource-base-row input.outsourceBase {
+    width: 120px !important;
+    height: 36px !important;
+    padding: 2px 8px !important;
+    font-size: 14px !important;
+    border: 1px solid #e67e22 !important;
+    border-radius: 4px !important;
+    text-align: right;
+    font-weight: bold;
+    color: #b71c1c;
+}
+.outsource-formula { font-size: 11px; color: #e67e22; margin-top: 3px; font-style: italic; }
+.btn-add-outsource-mult {
+    background: none;
+    border: 1px dashed #e67e22;
+    color: #e67e22;
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    white-space: nowrap;
+    min-height: 36px;
+}
+/* .btn-add-outsource styling consolidated above into the shared neutral add-button rule */
+
+/* ── Multiplier row ── */
+.multiplier-row {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    background: #f0f4ff;
+    border-radius: 6px;
+    border-left: 3px solid #1976d2;
+}
+.multiplier-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 6px;
+}
+.multiplier-tag {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: white;
+    border: 1px solid #c5d5f0;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+}
+.multiplier-tag label { font-size: 11px; font-weight: bold; color: #1976d2; margin: 0; white-space: nowrap; }
+.multiplier-tag input {
+    width: 65px !important;
+    height: 32px !important;
+    padding: 2px 6px !important;
+    font-size: 13px !important;
+    border: 1px solid #ddd !important;
+    border-radius: 3px !important;
+    text-align: center;
+}
+.multiplier-tag .remove-mult { background: none; border: none; color: #d32f2f; cursor: pointer; font-size: 16px; padding: 4px; min-width: 28px; min-height: 28px; }
+.btn-add-mult {
+    background: none;
+    border: 1px dashed #1976d2;
+    color: #1976d2;
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    white-space: nowrap;
+    min-height: 36px;
+}
+.btn-add-mult:hover { background: #e8f0fe; }
+.mult-summary { font-size: 11px; color: #666; margin-top: 4px; }
+
+.btn-clear-section {
+    background: none;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: bold;
+    color: #999;
+    cursor: pointer;
+    white-space: nowrap;
+    min-height: 36px;
+}
+.btn-clear-section:hover { border-color: #d32f2f; color: #d32f2f; }
+
+/* .btn-add-flat styling consolidated above into the shared neutral add-button rule; keep size/spacing tweaks here */
+.btn-add-flat {
+    padding: 10px 18px;
+    font-size: 13px;
+    margin-top: 8px;
+    min-height: 44px;
+}
+
+/* Manual formula bar */
+.manual-formula-row {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: #fffbf0;
+    border: 1px solid #f0d080;
+    border-radius: 5px;
+    flex-wrap: wrap;
+}
+.manual-formula-row.active { display: flex; }
+.manual-formula-label { font-size: 11px; font-weight: bold; color: #b8860b; white-space: nowrap; flex-shrink: 0; }
+.manual-formula-input {
+    flex: 1;
+    min-width: 120px;
+    height: 34px !important;
+    padding: 3px 8px !important;
+    font-size: 13px !important;
+    font-family: 'Courier New', monospace !important;
+    border: 1px solid #e0c060 !important;
+    border-radius: 4px !important;
+    background: white !important;
+    color: #2c3e50 !important;
+}
+.manual-formula-result { font-size: 12px; font-weight: bold; color: #b8860b; white-space: nowrap; flex-shrink: 0; min-width: 80px; text-align: right; }
+.manual-formula-result.err { color: #d32f2f; }
+.btn-toggle-manual {
+    background: none;
+    border: 1px dashed #b8860b;
+    color: #b8860b;
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    white-space: nowrap;
+    min-height: 36px;
+}
+.btn-toggle-manual:hover { background: #fffbf0; }
+.btn-toggle-manual.active { background: #b8860b; color: white; border-style: solid; }
+
+/* Add-on materials */
+.addon-section { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #c5d5f0; }
+.addon-section-title { font-size: 11px; font-weight: bold; color: #7f5af0; margin-bottom: 5px; display: flex; align-items: center; gap: 6px; }
+.addon-tags { display: flex; flex-direction: column; gap: 5px; margin-bottom: 6px; }
+.addon-tag {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: white;
+    border: 1px solid #d4c5f9;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 12px;
+    flex-wrap: wrap;
+}
+.addon-tag input.addon-desc {
+    flex: 2;
+    min-width: 80px;
+    height: 32px !important;
+    padding: 2px 6px !important;
+    font-size: 13px !important;
+    border: 1px solid #ddd !important;
+    border-radius: 3px !important;
+}
+.addon-tag input.addon-price,
+.addon-tag input.addon-qty {
+    width: 70px !important;
+    height: 32px !important;
+    padding: 2px 6px !important;
+    font-size: 13px !important;
+    border: 1px solid #ddd !important;
+    border-radius: 3px !important;
+    text-align: right;
+}
+.addon-tag input.addon-qty { text-align: center; }
+.addon-tag .addon-label { font-size: 11px; color: #888; white-space: nowrap; flex-shrink: 0; }
+.addon-tag .addon-subtotal { font-size: 11px; color: #7f5af0; font-weight: bold; min-width: 55px; text-align: right; flex-shrink: 0; }
+.addon-tag .remove-addon { background: none; border: none; color: #d32f2f; cursor: pointer; font-size: 16px; padding: 4px; line-height: 1; flex-shrink: 0; }
+.btn-add-addon {
+    background: none;
+    border: 1px dashed #7f5af0;
+    color: #7f5af0;
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    white-space: nowrap;
+    min-height: 36px;
+}
+.btn-add-addon:hover { background: #f0ebff; }
+.addon-total-hint { font-size: 11px; color: #7f5af0; margin-top: 3px; }
+
+/* ── Reference images (attached per item, optional in printed PDF) ── */
+.refimg-section { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #b2dfcc; }
+.refimg-section-title { font-size: 11px; font-weight: bold; color: #1b8f6b; margin-bottom: 5px; display: flex; align-items: center; gap: 6px; }
+.refimg-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
+.refimg-thumb { width: 60px; }
+.refimg-thumb-box {
+    position: relative;
+    width: 60px;
+    height: 60px;
+    border-radius: 6px;
+    border: 1px solid #b2dfcc;
+    background: #eafaf3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+.refimg-thumb-box img { width: 100%; height: 100%; object-fit: cover; }
+.refimg-thumb-name {
+    font-size: 9px; color: #888; margin-top: 3px; text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.refimg-thumb-remove {
+    position: absolute; top: -6px; right: -6px; width: 18px; height: 18px;
+    border-radius: 50%; background: white; border: 1px solid #ddd;
+    display: flex; align-items: center; justify-content: center; padding: 0;
+    cursor: pointer; font-size: 11px; color: #d32f2f; line-height: 1;
+}
+.btn-add-refimg {
+    background: none; border: 1px dashed #1b8f6b; color: #1b8f6b;
+    border-radius: 4px; padding: 5px 10px; font-size: 11px; font-weight: bold;
+    cursor: pointer; white-space: nowrap; min-height: 36px;
+}
+.btn-add-refimg:hover { background: #eafaf3; }
+
+/* ── Loading ── */
+.loading { display: none; text-align: center; margin-top: 15px; font-weight: bold; color: #34495e; }
+.loading.show { display: block; }
+
+/* ── PDF Import loading overlay (fixed, centered — see HTML comment for why
+   this doesn't reuse .loading) ── */
+.pdf-import-loading-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 9500;
+    align-items: center;
+    justify-content: center;
+}
+.pdf-import-loading-overlay.show { display: flex; }
+.pdf-import-loading-box {
+    background: #fff;
+    border-radius: 12px;
+    padding: 28px 36px;
+    text-align: center;
+}
+.pdf-import-spinner {
+    width: 40px;
+    height: 40px;
+    margin: 0 auto 14px;
+    border: 4px solid #e9ecef;
+    border-top-color: #1976d2;
+    border-radius: 50%;
+    animation: pdfImportSpin 0.8s linear infinite;
+}
+@keyframes pdfImportSpin { to { transform: rotate(360deg); } }
+.pdf-import-loading-box p { font-size: 14px; color: #555; font-weight: bold; margin: 0; }
+
+/* ── Dev Tools ── */
+.dev-tools {
+    display: none;
+    margin-top: 20px;
+    padding: 14px 18px;
+    background: #2c3e50;
+    border-radius: 8px;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.dev-tools.show { display: flex; }
+.dev-tools-label { font-size: 11px; font-weight: bold; color: #f1c40f; letter-spacing: 1px; margin-right: auto; }
+.btn-dev {
+    border: 1px solid #f1c40f;
+    background: transparent;
+    color: #f1c40f;
+    border-radius: 4px;
+    padding: 9px 14px;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    min-height: 40px;
+}
+.btn-dev:hover { background: rgba(241,196,15,0.15); }
+/* Mobile: label on its own line, buttons right-aligned */
+@media (max-width: 559px) {
+    .dev-tools { justify-content: flex-end; }
+    .dev-tools-label { width: 100%; margin-right: 0; }
+}
+
+/* ════════════════════════════════════════
+   VISUAL FORMULA BUILDER
+   Replaces old multiplier-tag + manual-
+   formula bar for in-house items.
+════════════════════════════════════════ */
+
+/* ── Panel container ── */
+.fb-panel {
+    margin-bottom: 8px;
+    padding: 10px 12px;
+    background: #f0f4ff;
+    border-radius: 6px;
+    border-left: 3px solid #1976d2;
+}
+
+/* ── Tabs ── */
+.fb-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #d0d9f0;
+}
+.fb-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: bold;
+    color: #8a9bc0;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+    min-height: 32px;
+    -webkit-tap-highlight-color: transparent;
+}
+.fb-tab.active { color: #1976d2; border-bottom-color: #1976d2; }
+.fb-tab:hover:not(.active) { color: #2c3e50; }
+
+/* ── Simple mode ── */
+.fb-comp-label {
+    font-size: 11px;
+    font-weight: bold;
+    color: #5570a0;
+    margin-bottom: 6px;
+    letter-spacing: 0.3px;
+}
+
+.fb-comp-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 6px; }
+
+.fb-comp-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: white;
+    border: 1px solid #c5d5f0;
+    border-radius: 5px;
+    padding: 5px 8px;
+    flex-wrap: wrap;
+}
+
+.fb-comp-prefix {
+    font-size: 11px;
+    color: #5570a0;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.fb-price-input {
+    height: 32px !important;
+    padding: 2px 6px !important;
+    font-size: 13px !important;
+    border: 1px solid #c5d5f0 !important;
+    border-radius: 4px !important;
+    background: #fafcff !important;
+    text-align: right;
+}
+.fb-price-input { width: 90px !important; }
+.fb-price-input:focus { outline: none; border-color: #1976d2 !important; }
+
+.fb-comp-x { font-size: 12px; color: #8a9bc0; flex-shrink: 0; font-weight: bold; }
+
+.fb-comp-sub {
+    font-size: 11px;
+    font-weight: bold;
+    color: #5570a0;
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 60px;
+    text-align: right;
+}
+
+.fb-btn-remove-comp {
+    background: none;
+    border: none;
+    color: #d32f2f;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 3px 5px;
+    line-height: 1;
+    flex-shrink: 0;
+    border-radius: 3px;
+    min-width: 24px;
+    min-height: 24px;
+}
+.fb-btn-remove-comp:hover:not(:disabled) { background: #fff0f0; }
+.fb-btn-remove-comp:disabled { color: #ddd; cursor: not-allowed; }
+
+.fb-btn-add-comp {
+    background: none;
+    border: 1px dashed #1976d2;
+    color: #1976d2;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    min-height: 32px;
+    -webkit-tap-highlight-color: transparent;
+}
+.fb-btn-add-comp:hover { background: #e8f0fe; }
+
+/* ── Outer multiplier row ── */
+.fb-outer-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed #c5d5f0;
+    flex-wrap: wrap;
+}
+.fb-outer-label { font-size: 11px; color: #5570a0; white-space: nowrap; flex-shrink: 0; }
+.fb-outer-input {
+    width: 80px !important;
+    height: 32px !important;
+    padding: 2px 6px !important;
+    font-size: 13px !important;
+    border: 1px solid #c5d5f0 !important;
+    border-radius: 4px !important;
+    background: white !important;
+    text-align: right;
+    font-weight: bold;
+}
+.fb-outer-input:focus { outline: none; border-color: #1976d2 !important; }
+.fb-outer-hint { font-size: 10px; color: #1b5e20; font-style: italic; }
+
+/* ── Advanced mode ── */
+.fb-adv-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+}
+.fb-adv-equals { font-size: 13px; font-weight: bold; color: #b8860b; white-space: nowrap; flex-shrink: 0; }
+.fb-adv-input {
+    flex: 1;
+    min-width: 0;
+    height: 34px !important;
+    padding: 3px 8px !important;
+    font-size: 13px !important;
+    font-family: 'Courier New', monospace !important;
+    border: 1px solid #e0c060 !important;
+    border-radius: 4px !important;
+    background: #fffbf0 !important;
+    color: #2c3e50 !important;
+}
+.fb-adv-input:focus { outline: none; border-color: #b8860b !important; }
+
+.fb-adv-status { font-size: 12px; font-weight: bold; margin-bottom: 5px; min-height: 18px; }
+.fb-adv-ok  { color: #1b5e20; }
+.fb-adv-err { color: #d32f2f; }
+
+.fb-adv-tip {
+    font-size: 11px;
+    color: #8a9bc0;
+    margin-top: 4px;
+}
+.fb-adv-tip strong { color: #1976d2; }
+
+/* ── Live formula summary (bottom of panel) ── */
+.fb-formula-summary {
+    font-size: 11px;
+    color: #5570a0;
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px dashed #c5d5f0;
+    font-style: italic;
+    word-break: break-all;
+    line-height: 1.5;
+}
+
+/* ── Mobile responsive — quote form grouped mode ── */
+@media (max-width: 600px) {
+    /* Quote group card header wraps nicely */
+    .qg-header { gap: 8px; padding: 8px 10px; }
+    .quote-proj-input { min-width: 120px; }
+    .btn-attach-quote { font-size: 10px; padding: 5px 8px; }
+
+    /* Action buttons stack on mobile */
+    #actionButtons {
+        flex-direction: column;
+    }
+    #actionButtons .btn {
+        width: 100%;
+        text-align: center;
+    }
+
+    /* Item rows — stack on small screens */
+    .item-row {
+        grid-template-columns: 1fr 1fr !important;
+    }
+    .item-row > *:first-child {
+        grid-column: 1 / -1 !important;
+    }
+
+    /* Quote mode toggle wraps */
+    #btnToggleGrouped {
+        font-size: 12px;
+        padding: 7px 12px;
+    }
+
+    /* Flat rate rows */
+    .flat-item-row {
+        grid-template-columns: 1fr 1fr !important;
+    }
+    .flat-item-row > *:first-child {
+        grid-column: 1 / -1 !important;
+    }
+
+    /* History modal full width */
+    .modal-box { width: 95vw !important; max-width: 95vw !important; }
+
+    /* Grand total box */
+    .grand-total-box { padding: 12px; }
+}
